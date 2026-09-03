@@ -695,7 +695,7 @@ export const CadWorkspace: React.FC = () => {
       manager.positionGizmoEnabled = true;
       manager.rotationGizmoEnabled = true;
       manager.boundingBoxGizmoEnabled = false;
-      manager.usePointerToAttach = true; // Permite hacer clic para editar
+      manager.usePointerToAttachGizmos = true;
       manager.clearGizmoOnEmptyPointerEvent = true;
       gizmoManager.current = manager;
 
