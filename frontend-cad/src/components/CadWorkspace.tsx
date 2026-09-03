@@ -78,22 +78,35 @@ export const CadWorkspace: React.FC = () => {
   const snapToGrid = (val: number) => Math.round(val / (GRID_SIZE/5)) * (GRID_SIZE/5);
 
   const getSnappedPoint = (pointer: {x: number, y: number}, refPoint?: {x: number, y: number}, bypassOrtho?: boolean): {x: number, y: number, isColumnSnap: boolean} => {
-    const activeColumns = furniture.filter(f => f.level === currentLevel && f.type === 'column');
     const SNAP_DISTANCE = 30;
+    
+    // 1. Column Snap
+    const activeColumns = furniture.filter(f => f.level === currentLevel && f.type === 'column');
     for (const col of activeColumns) {
-      const dx = col.position.x - pointer.x;
-      const dy = col.position.y - pointer.y;
-      if (Math.sqrt(dx*dx + dy*dy) < SNAP_DISTANCE) {
-        if (refPoint && !bypassOrtho) {
-            const cdx = Math.abs(col.position.x - refPoint.x);
-            const cdy = Math.abs(col.position.y - refPoint.y);
-            if (cdx < SNAP_DISTANCE) return { x: refPoint.x, y: col.position.y, isColumnSnap: true };
-            if (cdy < SNAP_DISTANCE) return { x: col.position.x, y: refPoint.y, isColumnSnap: true };
-        }
+      if (Math.hypot(col.position.x - pointer.x, col.position.y - pointer.y) < SNAP_DISTANCE) {
         return { x: col.position.x, y: col.position.y, isColumnSnap: true };
       }
     }
+
+    // 2. Wall Endpoint and Midpoint Snap (Advanced CAD Snapping)
+    for (const w of walls.filter(w => w.level === currentLevel)) {
+      // Endpoint 1
+      if (Math.hypot(w.startPoint.x - pointer.x, w.startPoint.y - pointer.y) < SNAP_DISTANCE) {
+         return { x: w.startPoint.x, y: w.startPoint.y, isColumnSnap: true };
+      }
+      // Endpoint 2
+      if (Math.hypot(w.endPoint.x - pointer.x, w.endPoint.y - pointer.y) < SNAP_DISTANCE) {
+         return { x: w.endPoint.x, y: w.endPoint.y, isColumnSnap: true };
+      }
+      // Midpoint
+      const midX = (w.startPoint.x + w.endPoint.x) / 2;
+      const midY = (w.startPoint.y + w.endPoint.y) / 2;
+      if (Math.hypot(midX - pointer.x, midY - pointer.y) < SNAP_DISTANCE) {
+         return { x: midX, y: midY, isColumnSnap: true };
+      }
+    }
     
+    // 3. Grid & Ortho Snap
     let rawX = snapToGrid(pointer.x);
     let rawY = snapToGrid(pointer.y);
 
@@ -508,8 +521,36 @@ export const CadWorkspace: React.FC = () => {
         const snapped = getSnappedPoint(pointer, {x: drawStartX, y: drawStartY}, bypass);
         
         canvas.remove(currentLineRef.current);
+        
+        // Remover la cota temporal anterior
+        const tempDims = canvas.getObjects().filter(o => o.name === 'temp-dimension');
+        tempDims.forEach(o => canvas.remove(o));
+
         currentLineRef.current = createWallGraphic(drawStartX, drawStartY, snapped.x, snapped.y, 15);
         canvas.add(currentLineRef.current);
+
+        // Cota temporal dinámica profesional
+        const dx = snapped.x - drawStartX; const dy = snapped.y - drawStartY;
+        const lenM = (Math.sqrt(dx*dx + dy*dy) / PIXELS_PER_METER).toFixed(2);
+        const angle = Math.atan2(dy, dx);
+        
+        if (Math.sqrt(dx*dx + dy*dy) > 10) {
+            const tempText = new fabric.Text(`${lenM}m`, {
+                left: drawStartX + dx/2,
+                top: drawStartY + dy/2 - 15,
+                fontSize: 12,
+                fill: '#f59e0b',
+                fontWeight: 'bold',
+                fontFamily: 'sans-serif',
+                originX: 'center',
+                originY: 'center',
+                angle: angle * 180 / Math.PI,
+                name: 'temp-dimension',
+                selectable: false
+            });
+            canvas.add(tempText);
+        }
+
         canvas.renderAll();
       });
 
@@ -521,7 +562,10 @@ export const CadWorkspace: React.FC = () => {
           const snapped = getSnappedPoint(pointer, {x: drawStartX, y: drawStartY}, bypass);
           const newWall = new Wall({ x: drawStartX, y: drawStartY }, { x: snapped.x, y: snapped.y }, 15, currentLevel);
           if (newWall.lengthPx > GRID_SIZE / 2) setWalls(prev => [...prev, newWall]);
+          
           canvas.remove(currentLineRef.current);
+          const tempDims = canvas.getObjects().filter(o => o.name === 'temp-dimension');
+          tempDims.forEach(o => canvas.remove(o));
         }
         isDrawingRef.current = false; currentLineRef.current = null;
       });
