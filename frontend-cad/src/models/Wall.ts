@@ -21,6 +21,8 @@ export interface FurnitureElement {
   position: Point;
   angle: number; // en radianes
   level: number; // Piso 1, 2, etc.
+  width?: number; // En metros
+  height?: number; // En metros
   label?: string;
   manufacturer?: string;
   cost?: number;

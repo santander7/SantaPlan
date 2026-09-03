@@ -81,6 +81,8 @@ export const CadWorkspace: React.FC = () => {
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedObjectType, setSelectedObjectType] = useState<'wall' | 'element' | 'furniture' | null>(null);
   const [editLengthStr, setEditLengthStr] = useState<string>("");
+  const [editWidthStr, setEditWidthStr] = useState<string>("");
+  const [editHeightStr, setEditHeightStr] = useState<string>("");
 
   const [searchTerm, setSearchTerm] = useState('');
   const [capturedPlanImage, setCapturedPlanImage] = useState<string | undefined>();
@@ -175,8 +177,8 @@ export const CadWorkspace: React.FC = () => {
     const length = Math.sqrt(dx * dx + dy * dy);
     const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
     
-    // Muros estilo SmartDraw (Borde negro, relleno blanco)
-    const rect = new fabric.Rect({ width: length, height: thickness || 8, fill: 'white', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' });
+    // Muros estilo SmartDraw (Negro Sólido)
+    const rect = new fabric.Rect({ width: length, height: thickness || 8, fill: '#1a1a1a', stroke: '#000000', strokeWidth: 1, originX: 'center', originY: 'center' });
     const group = new fabric.Group([rect], {
       left: x1 + dx / 2, top: y1 + dy / 2, angle: angle, originX: 'center', originY: 'center',
       selectable: activeMode === 'select', name: 'wall', data: { id }
@@ -285,64 +287,85 @@ export const CadWorkspace: React.FC = () => {
       });
     }
 
-    let svgPath = ''; let scale = 1; let isSolid = false;
+    let svgPath = ''; let wMeters = 1; let hMeters = 1; let fillColor = 'white';
     
     if (f.type === 'bed') {
       svgPath = "M 0 0 L 100 0 L 100 120 L 0 120 Z M 10 5 L 45 5 L 45 30 L 10 30 Z M 55 5 L 90 5 L 90 30 L 55 30 Z M 0 45 L 100 45 M 20 45 L 80 45 L 80 115 L 20 115 Z";
-      scale = 0.8;
+      wMeters = 1.50; hMeters = 1.90; fillColor = '#9ca3af';
     } else if (f.type === 'toilet') {
       svgPath = "M 0 0 L 40 0 L 40 15 L 0 15 Z M 8 15 C 8 45 32 45 32 15 Z M 15 20 C 15 35 25 35 25 20 Z M 20 0 L 20 4";
-      scale = 0.8;
+      wMeters = 0.45; hMeters = 0.70; fillColor = '#fef08a';
     } else if (f.type === 'plant') {
       svgPath = "M 20 20 C 20 0 0 10 20 20 C 40 10 20 0 20 20 C 20 40 40 30 20 20 C 0 30 20 40 20 20 Z";
-      scale = 1.0;
+      wMeters = 0.60; hMeters = 0.60; fillColor = '#86efac';
     } else if (f.type === 'sofa') {
       svgPath = "M 0 0 L 120 0 L 120 45 L 0 45 Z M 15 5 L 105 5 L 105 35 L 15 35 Z M 15 5 L 45 5 L 45 35 L 15 35 Z M 45 5 L 75 5 L 75 35 L 45 35 Z M 75 5 L 105 5 L 105 35 L 75 35 Z M 0 5 L 15 5 L 15 45 L 0 45 Z M 105 5 L 120 5 L 120 45 L 105 45 Z";
-      scale = 0.8;
+      wMeters = 1.80; hMeters = 0.90; fillColor = '#9ca3af';
     } else if (f.type === 'table') {
       svgPath = "M 20 20 L 80 20 L 80 80 L 20 80 Z M 25 25 L 75 25 L 75 75 L 25 75 Z M 30 0 L 70 0 L 70 15 L 30 15 Z M 30 85 L 70 85 L 70 100 L 30 100 Z M 0 30 L 15 30 L 15 70 L 0 70 Z M 85 30 L 100 30 L 100 70 L 85 70 Z";
-      scale = 0.8;
+      wMeters = 1.20; hMeters = 0.80; fillColor = '#d1d5db';
     } else if (f.type === 'chair') {
       svgPath = "M 5 5 L 35 5 L 35 35 L 5 35 Z M 0 0 L 40 0 L 40 10 L 0 10 Z M 10 10 L 30 10 L 30 30 L 10 30 Z";
-      scale = 0.9;
+      wMeters = 0.50; hMeters = 0.50; fillColor = '#d1d5db';
     } else if (f.type === 'stairs') {
       svgPath = "M 0 0 L 40 0 L 40 120 L 0 120 Z M 0 20 L 40 20 M 0 40 L 40 40 M 0 60 L 40 60 M 0 80 L 40 80 M 0 100 L 40 100 M 20 10 L 20 110 M 15 15 L 20 5 L 25 15";
-      scale = 0.9;
+      wMeters = 1.00; hMeters = 3.00;
     } else if (f.type === 'column') {
       svgPath = "M 0 0 L 20 0 L 20 20 L 0 20 Z M 0 0 L 20 20 M 20 0 L 0 20";
-      scale = 1.0; isSolid = true; 
+      wMeters = 0.40; hMeters = 0.40; fillColor = '#1a1a1a';
     } else if (f.type === 'car') {
       svgPath = "M 15 5 C 25 0, 45 0, 55 5 L 65 25 L 65 115 C 55 120, 15 120, 5 115 L 5 25 Z M 12 35 C 25 25, 45 25, 58 35 L 55 60 L 15 60 Z M 15 90 C 25 100, 45 100, 55 90 L 52 70 L 18 70 Z M -2 20 L 5 20 L 5 45 L -2 45 Z M 65 20 L 72 20 L 72 45 L 65 45 Z M -2 80 L 5 80 L 5 105 L -2 105 Z M 65 80 L 72 80 L 72 105 L 65 105 Z M 20 10 L 50 10 M 20 110 L 50 110";
-      scale = 1.0;
+      wMeters = 2.00; hMeters = 4.50;
     } else if (f.type === 'dining') {
       svgPath = "M 20 0 L 140 0 L 140 60 L 20 60 Z M 35 -15 L 60 -15 L 60 -5 L 35 -5 Z M 70 -15 L 95 -15 L 95 -5 L 70 -5 Z M 105 -15 L 130 -15 L 130 -5 L 105 -5 Z M 35 65 L 60 65 L 60 75 L 35 75 Z M 70 65 L 95 65 L 95 75 L 70 75 Z M 105 65 L 130 65 L 130 75 L 105 75 Z M 5 15 L 15 15 L 15 45 L 5 45 Z M 145 15 L 155 15 L 155 45 L 145 45 Z";
-      scale = 0.8;
+      wMeters = 2.00; hMeters = 1.00; fillColor = '#d1d5db';
     } else if (f.type === 'tv') {
       svgPath = "M 0 0 L 100 0 L 100 10 L 0 10 Z";
-      scale = 0.8;
+      wMeters = 1.20; hMeters = 0.15; fillColor = '#1a1a1a';
     } else if (f.type === 'lamp') {
       svgPath = "M 20 0 C 40 0 40 40 20 40 C 0 40 0 0 20 0 Z M 20 10 L 20 30 M 10 20 L 30 20";
-      scale = 0.8;
+      wMeters = 0.40; hMeters = 0.40; fillColor = '#fef08a';
     } else if (f.type === 'shower') {
       svgPath = "M 0 0 L 80 0 L 80 80 L 0 80 Z M 0 0 L 80 80 M 80 0 L 0 80 M 35 35 L 45 35 L 45 45 L 35 45 Z";
-      scale = 0.8;
+      wMeters = 1.00; hMeters = 1.00;
     } else if (f.type === 'bathtub') {
       svgPath = "M 0 0 L 160 0 L 160 70 L 0 70 Z M 10 10 C 10 0 150 0 150 10 L 150 60 C 150 70 10 70 10 60 Z M 20 35 C 25 35 25 45 20 45 C 15 45 15 35 20 35 Z";
-      scale = 0.8;
+      wMeters = 1.60; hMeters = 0.70; fillColor = '#fef08a';
     } else if (f.type === 'socket') {
       svgPath = "M 0 0 L 20 0 L 20 20 L 0 20 Z M 10 20 L 10 40";
-      scale = 0.6;
+      wMeters = 0.15; hMeters = 0.15;
     } else if (f.type === 'tree') {
       svgPath = "M 40 10 C 60 -10, 80 10, 70 30 C 90 40, 80 70, 60 70 C 50 90, 30 90, 20 70 C 0 70, -10 40, 10 30 C 0 10, 20 -10, 40 10 Z";
-      scale = 1.0;
+      wMeters = 1.50; hMeters = 1.50; fillColor = '#86efac';
     } else if (f.type === 'kitchen') {
       svgPath = "M 0 0 L 120 0 L 120 60 L 0 60 Z M 10 10 C 25 10 25 25 10 25 C -5 25 -5 10 10 10 Z M 35 10 C 50 10 50 25 35 25 C 20 25 20 10 35 10 Z M 10 35 C 25 35 25 50 10 50 C -5 50 -5 35 10 35 Z M 35 35 C 50 35 50 50 35 50 C 20 50 20 35 35 35 Z M 70 10 L 110 10 L 110 50 L 70 50 Z M 90 20 C 95 20 95 25 90 25 C 85 25 85 20 90 20 Z";
-      scale = 0.8;
+      wMeters = 1.20; hMeters = 0.60; fillColor = '#d1d5db';
     }
 
-    const path = new fabric.Path(svgPath, { fill: isSolid ? 'black' : 'transparent', stroke: 'black', strokeWidth: 2, scaleX: scale, scaleY: scale });
-    const bg = new fabric.Rect({ left: path.left, top: path.top, width: path.width, height: path.height, fill: 'white', scaleX: scale, scaleY: scale });
-    const grp = new fabric.Group([bg, path], { left: f.position.x, top: f.position.y, angle: f.angle * (180/Math.PI), originX: 'center', originY: 'center', selectable: activeMode === 'select', name: 'furniture', data: { id: f.id } });
+    const finalWMeters = f.width !== undefined ? f.width : wMeters;
+    const finalHMeters = f.height !== undefined ? f.height : hMeters;
+
+    const path = new fabric.Path(svgPath);
+    const bounds = path.getBoundingRect();
+    
+    // Calcular escala exacta para que coincida con las medidas estándar
+    const scaleX = (finalWMeters * PIXELS_PER_METER) / bounds.width;
+    const scaleY = (finalHMeters * PIXELS_PER_METER) / bounds.height;
+    
+    path.set({ fill: fillColor, stroke: '#1a1a1a', strokeWidth: 2 / Math.max(scaleX, scaleY), scaleX, scaleY });
+    
+    const bgWidth = finalWMeters * PIXELS_PER_METER;
+    const bgHeight = finalHMeters * PIXELS_PER_METER;
+    const pLeft = path.left || 0;
+    const pTop = path.top || 0;
+    const bg = new fabric.Rect({ left: pLeft, top: pTop, width: bgWidth, height: bgHeight, fill: 'white' });
+    
+    // Textos de dimensiones estilo SmartDraw
+    const dimColor = '#52525b';
+    const textW = new fabric.Text(`◄ ${finalWMeters.toFixed(2)} ►`, { left: pLeft + bgWidth/2, top: pTop - 10, fontSize: 10, fill: dimColor, fontFamily: 'sans-serif', originX: 'center', originY: 'bottom' });
+    const textH = new fabric.Text(`◄ ${finalHMeters.toFixed(2)} ►`, { left: pLeft + bgWidth + 10, top: pTop + bgHeight/2, fontSize: 10, fill: dimColor, fontFamily: 'sans-serif', originX: 'left', originY: 'center', angle: 90 });
+
+    const grp = new fabric.Group([bg, path, textW, textH], { left: f.position.x, top: f.position.y, angle: f.angle * (180/Math.PI), originX: 'center', originY: 'center', selectable: activeMode === 'select', name: 'furniture', data: { id: f.id } });
     return grp;
   };
 
@@ -1152,6 +1175,15 @@ export const CadWorkspace: React.FC = () => {
     }));
   };
 
+  const updateFurnitureSize = (wMeters: number, hMeters: number) => {
+      setFurniture(prev => prev.map(f => {
+          if (f.id === selectedObjectId) {
+              return { ...f, width: wMeters, height: hMeters };
+          }
+          return f;
+      }));
+  };
+
   const getSelectedElement = () => {
     for(const w of walls) {
       const el = w.elements.find(e => e.id === selectedObjectId);
@@ -1163,12 +1195,40 @@ export const CadWorkspace: React.FC = () => {
   const selectedWall = walls.find(w => w.id === selectedObjectId);
   const selectedFurn = furniture.find(f => f.id === selectedObjectId);
 
+  const getStandardFurnSize = (type: string) => {
+    switch (type) {
+      case 'bed': return { w: 1.50, h: 1.90 };
+      case 'toilet': return { w: 0.45, h: 0.70 };
+      case 'plant': return { w: 0.60, h: 0.60 };
+      case 'sofa': return { w: 1.80, h: 0.90 };
+      case 'table': return { w: 1.20, h: 0.80 };
+      case 'chair': return { w: 0.50, h: 0.50 };
+      case 'stairs': return { w: 1.00, h: 3.00 };
+      case 'column': return { w: 0.40, h: 0.40 };
+      case 'car': return { w: 2.00, h: 4.50 };
+      case 'dining': return { w: 2.00, h: 1.00 };
+      case 'tv': return { w: 1.20, h: 0.15 };
+      case 'lamp': return { w: 0.40, h: 0.40 };
+      case 'shower': return { w: 1.00, h: 1.00 };
+      case 'bathtub': return { w: 1.60, h: 0.70 };
+      case 'socket': return { w: 0.15, h: 0.15 };
+      case 'tree': return { w: 1.50, h: 1.50 };
+      case 'kitchen': return { w: 1.20, h: 0.60 };
+      default: return { w: 1.00, h: 1.00 };
+    }
+  };
+
   useEffect(() => {
     if (selectedObjectType === 'wall' && selectedWall) {
       const lenM = Math.sqrt(Math.pow(selectedWall.endPoint.x - selectedWall.startPoint.x, 2) + Math.pow(selectedWall.endPoint.y - selectedWall.startPoint.y, 2)) / PIXELS_PER_METER;
       setEditLengthStr(lenM.toFixed(2));
     }
-  }, [selectedObjectId, selectedWall, selectedObjectType]);
+    if (selectedObjectType === 'furniture' && selectedFurn) {
+      const std = getStandardFurnSize(selectedFurn.type);
+      setEditWidthStr((selectedFurn.width !== undefined ? selectedFurn.width : std.w).toFixed(2));
+      setEditHeightStr((selectedFurn.height !== undefined ? selectedFurn.height : std.h).toFixed(2));
+    }
+  }, [selectedObjectId, selectedWall, selectedFurn, selectedObjectType]);
 
   const filteredSymbols = SYMBOLS.filter(s => s.label.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -1328,6 +1388,34 @@ export const CadWorkspace: React.FC = () => {
             )}
             {selectedObjectType === 'furniture' && selectedFurn && (
               <div className="text-sm text-gray-700 bg-white p-3 border border-gray-200 rounded">
+                {selectedObjectType === 'furniture' && selectedFurn && (
+                <>
+                  <label className="flex flex-col text-xs font-semibold gap-1 text-gray-600 mb-2">
+                    Ancho (m)
+                    <input type="text" value={editWidthStr} 
+                      onChange={e => setEditWidthStr(e.target.value)} 
+                      onBlur={() => {
+                          const w = parseFloat(editWidthStr.replace(',','.'));
+                          const h = parseFloat(editHeightStr.replace(',','.'));
+                          if (!isNaN(w) && w > 0.1 && !isNaN(h)) updateFurnitureSize(w, h);
+                      }}
+                      onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
+                      className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-yellow-400" />
+                  </label>
+                  <label className="flex flex-col text-xs font-semibold gap-1 text-gray-600 mb-2">
+                    Alto (m)
+                    <input type="text" value={editHeightStr} 
+                      onChange={e => setEditHeightStr(e.target.value)} 
+                      onBlur={() => {
+                          const w = parseFloat(editWidthStr.replace(',','.'));
+                          const h = parseFloat(editHeightStr.replace(',','.'));
+                          if (!isNaN(h) && h > 0.1 && !isNaN(w)) updateFurnitureSize(w, h);
+                      }}
+                      onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
+                      className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-yellow-400" />
+                  </label>
+                </>
+              )}
                 <p className="font-semibold mb-3 text-blue-600 capitalize">{selectedFurn.type}</p>
                 
                 {selectedFurn.type === 'text' && (
