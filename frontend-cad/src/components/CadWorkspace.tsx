@@ -349,9 +349,16 @@ export const CadWorkspace: React.FC = () => {
   const renderWalls2D = useCallback(() => {
     if (!fabricCanvas.current) return;
     const canvas = fabricCanvas.current;
-    
-    canvas.getObjects().forEach(obj => {
-      if (['wall', 'wall-text', 'door', 'window', 'garage', 'furniture', 'stairs', 'element', 'wall-handle', 'dimension'].includes(obj.name || '')) canvas.remove(obj);
+
+    // Guardar si estaba seleccionado para no perder el estado
+    canvas.discardActiveObject();
+
+    // Clonar el array para evitar saltos al remover (bug de mutación de array)
+    const objects = [...canvas.getObjects()];
+    objects.forEach(obj => {
+      if (['wall', 'wall-text', 'door', 'window', 'garage', 'furniture', 'stairs', 'element', 'wall-handle', 'dimension'].includes(obj.name || '')) {
+        canvas.remove(obj);
+      }
     });
 
     walls.filter(w => w.level === currentLevel).forEach(wall => {
@@ -363,6 +370,7 @@ export const CadWorkspace: React.FC = () => {
         const h1 = new fabric.Circle({ left: wall.startPoint.x, top: wall.startPoint.y, radius: 8, fill: '#f59e0b', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center', hasControls: false, hasBorders: false, hoverCursor: 'pointer', name: 'wall-handle', data: { wallId: wall.id, type: 'start' } });
         const h2 = new fabric.Circle({ left: wall.endPoint.x, top: wall.endPoint.y, radius: 8, fill: '#f59e0b', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center', hasControls: false, hasBorders: false, hoverCursor: 'pointer', name: 'wall-handle', data: { wallId: wall.id, type: 'end' } });
         canvas.add(h1, h2);
+        if (activeMode === 'select') canvas.setActiveObject(group);
       }
       canvas.add(group);
       
@@ -396,12 +404,16 @@ export const CadWorkspace: React.FC = () => {
       if(selectedObjectId === f.id) {
         if(grp.item(1)) grp.item(1).set('stroke', '#f59e0b');
         else grp.item(0).set('fill', '#f59e0b'); 
+        if (activeMode === 'select') canvas.setActiveObject(grp);
       }
       canvas.add(grp);
     });
     furns.filter(f => f.type === 'column').forEach(f => {
       const grp = getFurnitureGraphic(f);
-      if(selectedObjectId === f.id) grp.item(1).set('stroke', '#f59e0b');
+      if(selectedObjectId === f.id) {
+          grp.item(1).set('stroke', '#f59e0b');
+          if (activeMode === 'select') canvas.setActiveObject(grp);
+      }
       canvas.add(grp);
     });
     canvas.renderAll();
