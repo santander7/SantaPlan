@@ -606,47 +606,63 @@ export const CadWorkspace: React.FC = () => {
       camera.upperRadiusLimit = 100;
       camera.panningSensibility = 500;
 
-      // Entorno Diorama & HDRI (Image-Based Lighting)
-      scene.clearColor = new BABYLON.Color4(0.89, 0.85, 0.78, 1); // Beige arquitectónico
+      // ==========================================
+      // ILUMINACIÓN PROFESIONAL Y HDRI
+      // ==========================================
+      scene.clearColor = new BABYLON.Color4(0.95, 0.95, 0.96, 1);
       
-      // HDRI Environment for realistic PBR reflections
-      const envTexture = BABYLON.CubeTexture.CreateFromPrefilteredData("https://playground.babylonjs.com/textures/environment.dds", scene);
-      scene.environmentTexture = envTexture;
-      // create default skybox
-      scene.createDefaultSkybox(envTexture, true, (camera.maxZ - camera.minZ) / 2, 0.3);
+      // HDRI Realista de exterior (Cielo claro)
+      const hdrTexture = BABYLON.CubeTexture.CreateFromPrefilteredData("https://playground.babylonjs.com/textures/country.env", scene);
+      scene.environmentTexture = hdrTexture;
       
-      const hemiLight = new BABYLON.HemisphericLight("hemiLight", new BABYLON.Vector3(0, 1, 0), scene);
-      hemiLight.intensity = 0.3; // Reduce hemi light since HDRI provides ambient
-      hemiLight.groundColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+      // Skybox visual (con el mismo HDRI)
+      const skybox = BABYLON.MeshBuilder.CreateBox("skyBox", {size:1000.0}, scene);
+      const skyboxMaterial = new BABYLON.StandardMaterial("skyBox", scene);
+      skyboxMaterial.backFaceCulling = false;
+      skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("https://playground.babylonjs.com/textures/skybox", scene);
+      skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+      skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+      skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+      skybox.material = skyboxMaterial;
 
-      const dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(-0.5, -1, -0.5), scene);
-      dirLight.position = new BABYLON.Vector3(20, 40, 20);
-      dirLight.intensity = 1.0;
+      // Luz principal simulando el sol (Sombras nítidas pero suaves)
+      const dirLight = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.5, -1.2, -0.8), scene);
+      dirLight.position = new BABYLON.Vector3(20, 50, 20);
+      dirLight.intensity = 2.5; // El sol es fuerte, el HDRI rellena las sombras
       
-      const pointLight = new BABYLON.PointLight("pointLight", new BABYLON.Vector3(0, 2.5, 0), scene);
-      pointLight.diffuse = new BABYLON.Color3(1, 0.95, 0.85); // Luz cálida de interior
-      pointLight.intensity = 0.4;
-      
+      // Luz de relleno para aclarar interiores
+      const hemiLight = new BABYLON.HemisphericLight("hemiLight", new BABYLON.Vector3(0, 1, 0), scene);
+      hemiLight.intensity = 0.4;
+      hemiLight.diffuse = new BABYLON.Color3(1, 1, 1);
+      hemiLight.groundColor = new BABYLON.Color3(0.8, 0.8, 0.8);
+
+      // Sombras de alta calidad (Cascaded Shadow Maps para exteriores)
       const shadowGenerator = new BABYLON.ShadowGenerator(2048, dirLight);
-      shadowGenerator.usePercentageCloserFiltering = true; // PCF Soft Shadows
-      shadowGenerator.setDarkness(0.2);
+      shadowGenerator.useBlurExponentialShadowMap = true;
+      shadowGenerator.useKernelBlur = true;
+      shadowGenerator.blurKernel = 64;
+      shadowGenerator.setDarkness(0.15); // Sombras arquitectónicas claras
       shadowGeneratorRef.current = shadowGenerator;
 
-      // Pipeline de Post-Procesado Arquitectónico PBR
+      // ==========================================
+      // POST-PROCESAMIENTO ARQUITECTÓNICO
+      // ==========================================
       const pipeline = new BABYLON.DefaultRenderingPipeline("defaultPipeline", true, scene, [camera]);
-      pipeline.samples = 4; // Antialiasing (MSAA)
+      pipeline.samples = 8; // Máximo antialiasing
       pipeline.fxaaEnabled = true;
+      
+      // Tono fotográfico (Tone Mapping)
       pipeline.imageProcessingEnabled = true;
       pipeline.imageProcessing.toneMappingEnabled = true;
       pipeline.imageProcessing.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
-      pipeline.imageProcessing.exposure = 1.0;
-      pipeline.imageProcessing.contrast = 1.1;
+      pipeline.imageProcessing.exposure = 1.2;
+      pipeline.imageProcessing.contrast = 1.05;
 
-      // SSAO (Oclusión Ambiental Avanzada)
+      // Oclusión ambiental (SSAO) para esquinas y contacto de muebles
       const ssao = new BABYLON.SSAO2RenderingPipeline("ssao", scene, 1.0, [camera]);
-      ssao.radius = 2.0;
-      ssao.totalStrength = 1.2;
-      ssao.base = 0.5;
+      ssao.radius = 1.5;
+      ssao.totalStrength = 1.5;
+      ssao.base = 0.2;
       
       const manager = new BABYLON.GizmoManager(scene);
       manager.positionGizmoEnabled = true;
@@ -666,28 +682,31 @@ export const CadWorkspace: React.FC = () => {
     wallMeshes.current.forEach(mesh => mesh.dispose()); wallMeshes.current = [];
     glbMeshes.current.forEach(mesh => mesh.dispose()); glbMeshes.current = [];
 
-    // MATERIALES PBR
+    // MATERIALES PBR FOTOREALISTAS
     const wallMaterial = new BABYLON.PBRMaterial("wallMat", scene);
-    wallMaterial.albedoColor = new BABYLON.Color3(0.92, 0.92, 0.90); // Estuco cálido
-    wallMaterial.roughness = 0.9;
+    wallMaterial.albedoColor = new BABYLON.Color3(0.95, 0.95, 0.95); // Blanco puro y limpio
+    wallMaterial.roughness = 0.95; // Pintura mate, sin brillos plásticos
     wallMaterial.metallic = 0.0;
+    // Opcional: Bump de yeso para paredes
+    // wallMaterial.bumpTexture = new BABYLON.Texture("https://playground.babylonjs.com/textures/floor_bump.png", scene);
 
     const blackFrameMat = new BABYLON.PBRMaterial("blackFrame", scene);
-    blackFrameMat.albedoColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-    blackFrameMat.roughness = 0.4;
-    blackFrameMat.metallic = 0.2;
+    blackFrameMat.albedoColor = new BABYLON.Color3(0.15, 0.15, 0.15);
+    blackFrameMat.roughness = 0.6;
+    blackFrameMat.metallic = 0.4;
 
     const whiteFrameMat = new BABYLON.PBRMaterial("whiteFrame", scene);
-    whiteFrameMat.albedoColor = new BABYLON.Color3(0.95, 0.95, 0.95); 
-    whiteFrameMat.roughness = 0.5;
+    whiteFrameMat.albedoColor = new BABYLON.Color3(0.9, 0.9, 0.9); 
+    whiteFrameMat.roughness = 0.3;
     whiteFrameMat.metallic = 0.1;
     
     const glassMat = new BABYLON.PBRMaterial("glassMat", scene);
-    glassMat.albedoColor = new BABYLON.Color3(0.8, 0.9, 1.0);
-    glassMat.roughness = 0.05;
-    glassMat.metallic = 0.1;
-    glassMat.alpha = 0.3;
+    glassMat.albedoColor = new BABYLON.Color3(0.9, 0.95, 1.0);
+    glassMat.roughness = 0.01;
+    glassMat.metallic = 0.0;
+    glassMat.alpha = 0.2;
     glassMat.indexOfRefraction = 1.5;
+    glassMat.environmentIntensity = 1.0; // Reflejos fuertes del HDRI
 
     const metalGarageMat = new BABYLON.PBRMaterial("metalGarage", scene);
     metalGarageMat.albedoColor = new BABYLON.Color3(0.6, 0.6, 0.62);
@@ -704,23 +723,35 @@ export const CadWorkspace: React.FC = () => {
     const cxMeters = centerX / PIXELS_PER_METER;
     const czMeters = -centerY / PIXELS_PER_METER;
     
-    // Si no hay muros, asignar un tamaño básico
     const bbWidthM = isFinite(maxX) ? (maxX - minX + 20) / PIXELS_PER_METER : 20;
     const bbHeightM = isFinite(maxY) ? (maxY - minY + 20) / PIXELS_PER_METER : 20;
 
     if(scene.activeCamera) (scene.activeCamera as BABYLON.ArcRotateCamera).setTarget(new BABYLON.Vector3(cxMeters, 0, czMeters));
     
-    // Suelo delimitado estilo maqueta
+    // Suelo delimitado estilo maqueta con PBR
     const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: bbWidthM, height: bbHeightM }, scene);
     ground.position.x = cxMeters; ground.position.z = czMeters;
     ground.receiveShadows = true; 
     
     const groundMat = new BABYLON.PBRMaterial("groundMat", scene);
-    const woodTex = new BABYLON.Texture("https://playground.babylonjs.com/textures/wood.jpg", scene);
-    woodTex.uScale = 20; woodTex.vScale = 20;
+    const woodTex = new BABYLON.Texture("https://playground.babylonjs.com/textures/albedo.png", scene); // Textura de madera de alta calidad
+    woodTex.uScale = 5; woodTex.vScale = 5;
     groundMat.albedoTexture = woodTex;
-    groundMat.roughness = 0.2;
-    groundMat.metallic = 0.05;
+    
+    const woodBump = new BABYLON.Texture("https://playground.babylonjs.com/textures/normal.png", scene);
+    woodBump.uScale = 5; woodBump.vScale = 5;
+    groundMat.bumpTexture = woodBump;
+
+    const woodRef = new BABYLON.Texture("https://playground.babylonjs.com/textures/reflectivity.png", scene);
+    woodRef.uScale = 5; woodRef.vScale = 5;
+    groundMat.reflectivityTexture = woodRef;
+    
+    groundMat.roughness = 0.3; // Más opaco, menos "espejo"
+    groundMat.metallic = 0.0;
+    groundMat.useRoughnessFromMetallicTextureAlpha = false;
+    groundMat.useRoughnessFromMetallicTextureGreen = true;
+    groundMat.useMetallnessFromMetallicTextureBlue = true;
+    
     ground.material = groundMat;
     wallMeshes.current.push(ground);
 
