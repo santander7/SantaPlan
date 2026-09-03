@@ -1,0 +1,1128 @@
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { fabric } from 'fabric';
+import jsPDF from 'jspdf';
+import * as BABYLON from '@babylonjs/core';
+import '@babylonjs/loaders/glTF';
+import { Wall } from '../models/Wall';
+import type { WallElement, ElementType, FurnitureElement, FurnitureType } from '../models/Wall';
+import { Toolbar } from './Toolbar';
+import type { ToolMode, ViewMode } from './Toolbar';
+import { DoorClosed, LayoutGrid, Toilet, Sofa, Bed, TreeDeciduous, ArrowUpToLine, Search, Table2, Armchair, Type, Car, Utensils, Monitor, Plug, Lightbulb, Bath, Warehouse } from 'lucide-react';
+
+const GRID_SIZE = 50; 
+const PIXELS_PER_METER = 50;
+const FLOOR_HEIGHT_M = 2.8;
+
+const SYMBOLS = [
+  { id: 'door', icon: <DoorClosed size={20} className="mb-1 text-gray-600" />, label: 'Door' },
+  { id: 'window', icon: <LayoutGrid size={20} className="mb-1 text-gray-600" />, label: 'Window' },
+  { id: 'garage', icon: <Warehouse size={20} className="mb-1 text-gray-600" />, label: 'Garage' },
+  { id: 'bed', icon: <Bed size={20} className="mb-1 text-gray-600" />, label: 'Bed' },
+  { id: 'sofa', icon: <Sofa size={20} className="mb-1 text-gray-600" />, label: 'Sofa' },
+  { id: 'toilet', icon: <Toilet size={20} className="mb-1 text-gray-600" />, label: 'Toilet' },
+  { id: 'plant', icon: <TreeDeciduous size={20} className="mb-1 text-gray-600" />, label: 'Plant' },
+  { id: 'table', icon: <Table2 size={20} className="mb-1 text-gray-600" />, label: 'Table' },
+  { id: 'chair', icon: <Armchair size={20} className="mb-1 text-gray-600" />, label: 'Chair' },
+  { id: 'dining', icon: <Utensils size={20} className="mb-1 text-gray-600" />, label: 'Comedor' },
+  { id: 'tv', icon: <Monitor size={20} className="mb-1 text-gray-600" />, label: 'TV' },
+  { id: 'lamp', icon: <Lightbulb size={20} className="mb-1 text-gray-600" />, label: 'Lámpara' },
+  { id: 'shower', icon: <Bath size={20} className="mb-1 text-gray-600" />, label: 'Ducha' },
+  { id: 'socket', icon: <Plug size={20} className="mb-1 text-gray-600" />, label: 'Enchufe' },
+  { id: 'car', icon: <Car size={20} className="mb-1 text-gray-600" />, label: 'Auto', span: true },
+  { id: 'stairs', icon: <ArrowUpToLine size={20} className="mb-1 text-gray-600" />, label: 'Stairs', span: true },
+  { id: 'text', icon: <Type size={20} className="mb-1 text-gray-600" />, label: 'Text (Label)', span: true },
+];
+
+export const CadWorkspace: React.FC = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const engine3dRef = useRef<HTMLCanvasElement>(null);
+  
+  const fabricCanvas = useRef<fabric.Canvas | null>(null);
+  const babylonEngine = useRef<BABYLON.Engine | null>(null);
+  const babylonScene = useRef<BABYLON.Scene | null>(null);
+  const shadowGeneratorRef = useRef<BABYLON.ShadowGenerator | null>(null);
+
+  const wallMeshes = useRef<BABYLON.Mesh[]>([]);
+  const glbMeshes = useRef<BABYLON.AbstractMesh[]>([]);
+  const gizmoManager = useRef<BABYLON.GizmoManager | null>(null);
+  
+  const [activeMode, setActiveMode] = useState<ToolMode>('select');
+  const [viewMode, setViewMode] = useState<ViewMode>('2D');
+  const [currentLevel, setCurrentLevel] = useState<number>(1);
+  const [walls, setWalls] = useState<Wall[]>([]);
+  const [furniture, setFurniture] = useState<FurnitureElement[]>([]);
+  
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [selectedObjectType, setSelectedObjectType] = useState<'wall' | 'element' | 'furniture' | null>(null);
+  
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const isDrawingRef = useRef(false);
+  const currentLineRef = useRef<fabric.Group | null>(null);
+
+  const snapToGrid = (val: number) => Math.round(val / (GRID_SIZE/5)) * (GRID_SIZE/5);
+
+  const getSnappedPoint = (pointer: {x: number, y: number}, refPoint?: {x: number, y: number}, bypassOrtho?: boolean): {x: number, y: number, isColumnSnap: boolean} => {
+    const activeColumns = furniture.filter(f => f.level === currentLevel && f.type === 'column');
+    const SNAP_DISTANCE = 30;
+    for (const col of activeColumns) {
+      const dx = col.position.x - pointer.x;
+      const dy = col.position.y - pointer.y;
+      if (Math.sqrt(dx*dx + dy*dy) < SNAP_DISTANCE) {
+        if (refPoint && !bypassOrtho) {
+            const cdx = Math.abs(col.position.x - refPoint.x);
+            const cdy = Math.abs(col.position.y - refPoint.y);
+            if (cdx < SNAP_DISTANCE) return { x: refPoint.x, y: col.position.y, isColumnSnap: true };
+            if (cdy < SNAP_DISTANCE) return { x: col.position.x, y: refPoint.y, isColumnSnap: true };
+        }
+        return { x: col.position.x, y: col.position.y, isColumnSnap: true };
+      }
+    }
+    
+    let rawX = snapToGrid(pointer.x);
+    let rawY = snapToGrid(pointer.y);
+
+    if (refPoint && !bypassOrtho) {
+        const dx = Math.abs(rawX - refPoint.x);
+        const dy = Math.abs(rawY - refPoint.y);
+        if (dx > dy) rawY = refPoint.y; else rawX = refPoint.x;
+    }
+    return { x: rawX, y: rawY, isColumnSnap: false };
+  };
+
+  useEffect(() => {
+    const canvas = fabricCanvas.current;
+    if (!canvas) return;
+    canvas.on('mouse:wheel', function(opt) {
+      var delta = opt.e.deltaY;
+      var zoom = canvas.getZoom();
+      zoom *= 0.999 ** delta;
+      if (zoom > 20) zoom = 20;
+      if (zoom < 0.1) zoom = 0.1;
+      canvas.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom);
+      opt.e.preventDefault(); opt.e.stopPropagation();
+    });
+  }, [activeMode]);
+
+  const drawGrid = (canvas: fabric.Canvas) => {
+    canvas.clear();
+    canvas.setBackgroundColor('#ffffff', canvas.renderAll.bind(canvas));
+    const size = 5000; 
+    for (let i = -size; i < size; i+=GRID_SIZE) {
+      canvas.add(new fabric.Line([ i, -size, i, size], { stroke: '#e5e7eb', selectable: false, evented: false }));
+      canvas.add(new fabric.Line([ -size, i, size, i], { stroke: '#e5e7eb', selectable: false, evented: false }));
+    }
+  };
+
+  const createWallGraphic = (x1: number, y1: number, x2: number, y2: number, id?: string) => {
+    const dx = x2 - x1; const dy = y2 - y1;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+    
+    const rect = new fabric.Rect({ width: length, height: 4, fill: '#1a1a1a', originX: 'center', originY: 'center' });
+    const group = new fabric.Group([rect], {
+      left: x1 + dx / 2, top: y1 + dy / 2, angle: angle, originX: 'center', originY: 'center',
+      selectable: activeMode === 'select', name: 'wall', data: { id }
+    });
+    return group;
+  };
+
+  // Architectural Auto-Dimensioning
+  const drawDimensionLine = (canvas: fabric.Canvas, wall: Wall) => {
+    const dx = wall.endPoint.x - wall.startPoint.x; 
+    const dy = wall.endPoint.y - wall.startPoint.y;
+    const length = Math.sqrt(dx*dx + dy*dy);
+    if (length < 10) return;
+
+    const angle = Math.atan2(dy, dx);
+    const offsetDistance = 35; // Distancia de la cota al muro
+    const nx = -Math.sin(angle); const ny = Math.cos(angle);
+    
+    const ox1 = wall.startPoint.x + nx * offsetDistance;
+    const oy1 = wall.startPoint.y + ny * offsetDistance;
+    const ox2 = wall.endPoint.x + nx * offsetDistance;
+    const oy2 = wall.endPoint.y + ny * offsetDistance;
+
+    const dimColor = '#71717a'; // Gris oscuro profesional
+    const objs = [];
+
+    // Líneas de extensión (desde muro hasta cota)
+    objs.push(new fabric.Line([wall.startPoint.x, wall.startPoint.y, ox1 + nx*5, oy1 + ny*5], { stroke: dimColor, strokeWidth: 0.5, selectable: false }));
+    objs.push(new fabric.Line([wall.endPoint.x, wall.endPoint.y, ox2 + nx*5, oy2 + ny*5], { stroke: dimColor, strokeWidth: 0.5, selectable: false }));
+
+    // Subdivisiones si hay elementos (puertas/ventanas/garajes)
+    if (wall.elements.length > 0) {
+        const sortedEls = [...wall.elements].sort((a,b) => a.positionRatio - b.positionRatio);
+        let currentRatio = 0;
+        let lastPt = { x: ox1, y: oy1 };
+        
+        sortedEls.forEach(el => {
+            const elWidthRatio = (el.width * (PIXELS_PER_METER/100)) / length;
+            const startRatio = el.positionRatio - elWidthRatio/2;
+            const endRatio = el.positionRatio + elWidthRatio/2;
+            
+            // Medida antes del elemento
+            if (startRatio > currentRatio) {
+                const pSX = ox1 + (ox2-ox1)*startRatio; const pSY = oy1 + (oy2-oy1)*startRatio;
+                objs.push(new fabric.Line([lastPt.x, lastPt.y, pSX, pSY], { stroke: dimColor, strokeWidth: 0.8, selectable: false }));
+                // Tick 
+                objs.push(new fabric.Line([pSX - nx*3 - Math.cos(angle)*3, pSY - ny*3 - Math.sin(angle)*3, pSX + nx*3 + Math.cos(angle)*3, pSY + ny*3 + Math.sin(angle)*3], { stroke: dimColor, strokeWidth: 1.5, selectable: false }));
+                // Línea de extensión del elemento
+                const wx = wall.startPoint.x + dx*startRatio; const wy = wall.startPoint.y + dy*startRatio;
+                objs.push(new fabric.Line([wx, wy, pSX + nx*5, pSY + ny*5], { stroke: dimColor, strokeWidth: 0.5, selectable: false }));
+                
+                const val = (length * (startRatio - currentRatio) / PIXELS_PER_METER).toFixed(2);
+                objs.push(new fabric.Text(val, { left: (lastPt.x + pSX)/2, top: (lastPt.y + pSY)/2 - 10, fontSize: 10, fill: dimColor, angle: angle*180/Math.PI, originX: 'center', originY: 'center', selectable: false }));
+                lastPt = {x: pSX, y: pSY};
+            }
+            
+            // Medida del elemento
+            const pEX = ox1 + (ox2-ox1)*endRatio; const pEY = oy1 + (oy2-oy1)*endRatio;
+            objs.push(new fabric.Line([lastPt.x, lastPt.y, pEX, pEY], { stroke: dimColor, strokeWidth: 0.8, selectable: false }));
+            // Tick
+            objs.push(new fabric.Line([pEX - nx*3 - Math.cos(angle)*3, pEY - ny*3 - Math.sin(angle)*3, pEX + nx*3 + Math.cos(angle)*3, pEY + ny*3 + Math.sin(angle)*3], { stroke: dimColor, strokeWidth: 1.5, selectable: false }));
+            // Línea de extensión
+            const wx2 = wall.startPoint.x + dx*endRatio; const wy2 = wall.startPoint.y + dy*endRatio;
+            objs.push(new fabric.Line([wx2, wy2, pEX + nx*5, pEY + ny*5], { stroke: dimColor, strokeWidth: 0.5, selectable: false }));
+
+            const val = (length * (endRatio - startRatio) / PIXELS_PER_METER).toFixed(2);
+            objs.push(new fabric.Text(val, { left: (lastPt.x + pEX)/2, top: (lastPt.y + pEY)/2 - 10, fontSize: 10, fill: dimColor, angle: angle*180/Math.PI, originX: 'center', originY: 'center', selectable: false }));
+            
+            lastPt = {x: pEX, y: pEY};
+            currentRatio = endRatio;
+        });
+
+        // Remanente
+        if (currentRatio < 1) {
+             objs.push(new fabric.Line([lastPt.x, lastPt.y, ox2, oy2], { stroke: dimColor, strokeWidth: 0.8, selectable: false }));
+             const val = (length * (1 - currentRatio) / PIXELS_PER_METER).toFixed(2);
+             objs.push(new fabric.Text(val, { left: (lastPt.x + ox2)/2, top: (lastPt.y + oy2)/2 - 10, fontSize: 10, fill: dimColor, angle: angle*180/Math.PI, originX: 'center', originY: 'center', selectable: false }));
+        }
+    } else {
+        // Cota principal única
+        objs.push(new fabric.Line([ox1, oy1, ox2, oy2], { stroke: dimColor, strokeWidth: 0.8, selectable: false }));
+        const val = (length / PIXELS_PER_METER).toFixed(2);
+        objs.push(new fabric.Text(val, { left: (ox1+ox2)/2, top: (oy1+oy2)/2 - 10, fontSize: 10, fill: dimColor, angle: angle*180/Math.PI, originX: 'center', originY: 'center', selectable: false }));
+    }
+
+    // Ticks exteriores
+    objs.push(new fabric.Line([ox1 - nx*3 - Math.cos(angle)*3, oy1 - ny*3 - Math.sin(angle)*3, ox1 + nx*3 + Math.cos(angle)*3, oy1 + ny*3 + Math.sin(angle)*3], { stroke: dimColor, strokeWidth: 1.5, selectable: false }));
+    objs.push(new fabric.Line([ox2 - nx*3 - Math.cos(angle)*3, oy2 - ny*3 - Math.sin(angle)*3, ox2 + nx*3 + Math.cos(angle)*3, oy2 + ny*3 + Math.sin(angle)*3], { stroke: dimColor, strokeWidth: 1.5, selectable: false }));
+
+    const grp = new fabric.Group(objs, { selectable: false, evented: false, name: 'dimension' });
+    canvas.add(grp);
+  };
+
+  const getFurnitureGraphic = (f: FurnitureElement) => {
+    if (f.type === 'text') {
+      const text = new fabric.Text(f.label || 'HABITACIÓN', {
+        fill: '#1a1a1a', fontSize: 18, fontFamily: 'sans-serif', fontWeight: 'bold',
+        originX: 'center', originY: 'center'
+      });
+      return new fabric.Group([text], {
+        left: f.position.x, top: f.position.y, angle: f.angle * (180/Math.PI),
+        originX: 'center', originY: 'center', selectable: activeMode === 'select', name: 'furniture', data: { id: f.id }
+      });
+    }
+
+    let svgPath = ''; let scale = 1; let isSolid = false;
+    
+    if (f.type === 'bed') {
+      svgPath = "M 0 0 L 100 0 L 100 120 L 0 120 Z M 10 10 L 40 10 L 40 30 L 10 30 Z M 60 10 L 90 10 L 90 30 L 60 30 Z M 0 40 L 100 40";
+      scale = 0.6;
+    } else if (f.type === 'toilet') {
+      svgPath = "M 10 0 L 30 0 L 30 15 L 10 15 Z M 15 15 C 5 40 35 40 25 15 Z";
+      scale = 1.0;
+    } else if (f.type === 'plant') {
+      svgPath = "M 20 0 C 40 0 40 40 20 40 C 0 40 0 0 20 0 Z";
+      scale = 1.0;
+    } else if (f.type === 'sofa') {
+      svgPath = "M 0 0 L 120 0 L 120 50 L 0 50 Z M 10 10 L 110 10 L 110 40 L 10 40 Z M 10 10 L 40 10 L 40 40 L 10 40 Z M 40 10 L 80 10 L 80 40 L 40 40 Z M 80 10 L 110 10 L 110 40 L 80 40 Z";
+      scale = 0.6;
+    } else if (f.type === 'table') {
+      svgPath = "M 0 0 L 80 0 L 80 80 L 0 80 Z M 10 10 L 70 10 L 70 70 L 10 70 Z";
+      scale = 0.7;
+    } else if (f.type === 'chair') {
+      svgPath = "M 0 0 L 40 0 L 40 40 L 0 40 Z M 5 30 L 35 30 L 35 45 L 5 45 Z";
+      scale = 0.8;
+    } else if (f.type === 'stairs') {
+      svgPath = "M 0 0 L 60 0 L 60 120 L 0 120 Z M 0 20 L 60 20 M 0 40 L 60 40 M 0 60 L 60 60 M 0 80 L 60 80 M 0 100 L 60 100";
+      scale = 0.8;
+    } else if (f.type === 'column') {
+      svgPath = "M 0 0 L 20 0 L 20 20 L 0 20 Z";
+      scale = 1.0; isSolid = true; 
+    } else if (f.type === 'car') {
+      // Silueta realista de auto top-down
+      svgPath = "M 15 10 C 25 5, 45 5, 55 10 L 65 30 L 65 110 C 55 115, 15 115, 5 110 L 5 30 Z M 12 35 C 25 25, 45 25, 58 35 L 55 60 L 15 60 Z M 15 90 C 25 100, 45 100, 55 90 L 52 70 L 18 70 Z M 0 40 L 5 40 L 5 50 L 0 50 Z M 65 40 L 70 40 L 70 50 L 65 50 Z";
+      scale = 1.5;
+    } else if (f.type === 'dining') {
+      svgPath = "M 20 20 L 120 20 L 120 80 L 20 80 Z M 40 10 L 60 10 M 80 10 L 100 10 M 40 90 L 60 90 M 80 90 L 100 90 M 10 40 L 10 60 M 130 40 L 130 60";
+      scale = 0.8;
+    } else if (f.type === 'tv') {
+      svgPath = "M 0 0 L 100 0 L 100 10 L 0 10 Z";
+      scale = 0.8; isSolid = true;
+    } else if (f.type === 'socket') {
+      svgPath = "M 10 0 C 20 0 20 20 10 20 C 0 20 0 0 10 0 Z M 5 10 L 7 10 M 13 10 L 15 10";
+      scale = 1.0;
+    } else if (f.type === 'lamp') {
+      svgPath = "M 10 0 C 20 0 20 20 10 20 C 0 20 0 0 10 0 Z M 0 10 L 20 10 M 10 0 L 10 20";
+      scale = 1.0;
+    } else if (f.type === 'shower') {
+      svgPath = "M 0 0 L 80 0 L 80 80 L 0 80 Z M 0 0 L 80 80 M 80 0 L 0 80 M 35 35 C 45 35 45 45 35 45 C 25 45 25 35 35 35 Z";
+      scale = 0.8;
+    }
+
+    const path = new fabric.Path(svgPath, { fill: isSolid ? 'black' : 'transparent', stroke: 'black', strokeWidth: 2, scaleX: scale, scaleY: scale });
+    const bg = new fabric.Rect({ left: path.left, top: path.top, width: path.width, height: path.height, fill: 'white', scaleX: scale, scaleY: scale });
+    const grp = new fabric.Group([bg, path], { left: f.position.x, top: f.position.y, angle: f.angle * (180/Math.PI), originX: 'center', originY: 'center', selectable: activeMode === 'select', name: 'furniture', data: { id: f.id } });
+    return grp;
+  };
+
+  const renderWalls2D = useCallback(() => {
+    if (!fabricCanvas.current) return;
+    const canvas = fabricCanvas.current;
+    
+    canvas.getObjects().forEach(obj => {
+      if (['wall', 'wall-text', 'door', 'window', 'garage', 'furniture', 'stairs', 'element', 'wall-handle', 'dimension'].includes(obj.name || '')) canvas.remove(obj);
+    });
+
+    walls.filter(w => w.level === currentLevel).forEach(wall => {
+      const group = createWallGraphic(wall.startPoint.x, wall.startPoint.y, wall.endPoint.x, wall.endPoint.y, wall.thickness, wall.id);
+      group.selectable = activeMode === 'select';
+      
+      if(selectedObjectId === wall.id) { 
+        group.item(0).set('stroke', '#f59e0b');
+        const h1 = new fabric.Circle({ left: wall.startPoint.x, top: wall.startPoint.y, radius: 8, fill: '#f59e0b', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center', hasControls: false, hasBorders: false, hoverCursor: 'pointer', name: 'wall-handle', data: { wallId: wall.id, type: 'start' } });
+        const h2 = new fabric.Circle({ left: wall.endPoint.x, top: wall.endPoint.y, radius: 8, fill: '#f59e0b', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center', hasControls: false, hasBorders: false, hoverCursor: 'pointer', name: 'wall-handle', data: { wallId: wall.id, type: 'end' } });
+        canvas.add(h1, h2);
+      }
+      canvas.add(group);
+      
+      // Dibujar Cotas Automáticas (Architectural Dimensions)
+      drawDimensionLine(canvas, wall);
+
+      wall.elements.forEach(el => {
+        const ex = wall.startPoint.x + (wall.endPoint.x - wall.startPoint.x) * el.positionRatio;
+        const ey = wall.startPoint.y + (wall.endPoint.y - wall.startPoint.y) * el.positionRatio;
+        let elGrp;
+        if (el.type === 'door') {
+          const dPath = new fabric.Path("M 0 0 L 40 0 C 40 40 0 40 0 0 Z", { fill: 'transparent', stroke: 'black', strokeWidth: 1.5 });
+          elGrp = new fabric.Group([dPath], { left: ex, top: ey, originX: 'center', originY: 'center', angle: (wall.angleRad * 180) / Math.PI });
+        } else if (el.type === 'garage') {
+          const dPath = new fabric.Path(`M -40 0 L 40 0 L 40 10 L -40 10 Z M -30 0 L -30 10 M -10 0 L -10 10 M 10 0 L 10 10 M 30 0 L 30 10`, { fill: 'white', stroke: 'black', strokeWidth: 1.0 });
+          elGrp = new fabric.Group([dPath], { left: ex, top: ey, originX: 'center', originY: 'center', angle: (wall.angleRad * 180) / Math.PI });
+        } else {
+          const rect1 = new fabric.Rect({ width: el.width * (GRID_SIZE/100), height: 4, fill: 'white', stroke: 'black', strokeWidth: 1 });
+          const rect2 = new fabric.Rect({ width: el.width * (GRID_SIZE/100), height: 2, fill: 'black' });
+          elGrp = new fabric.Group([rect1, rect2], { left: ex, top: ey, originX: 'center', originY: 'center', angle: (wall.angleRad * 180) / Math.PI });
+        }
+        elGrp.set({ selectable: activeMode === 'select', name: 'element', data: { id: el.id, wallId: wall.id } });
+        canvas.add(elGrp);
+      });
+    });
+
+    const furns = furniture.filter(f => f.level === currentLevel);
+    furns.filter(f => f.type !== 'column').forEach(f => {
+      const grp = getFurnitureGraphic(f);
+      if(selectedObjectId === f.id) {
+        if(grp.item(1)) grp.item(1).set('stroke', '#f59e0b');
+        else grp.item(0).set('fill', '#f59e0b'); 
+      }
+      canvas.add(grp);
+    });
+    furns.filter(f => f.type === 'column').forEach(f => {
+      const grp = getFurnitureGraphic(f);
+      if(selectedObjectId === f.id) grp.item(1).set('stroke', '#f59e0b');
+      canvas.add(grp);
+    });
+    canvas.renderAll();
+  }, [walls, furniture, activeMode, currentLevel, selectedObjectId]);
+
+  useEffect(() => {
+    if (viewMode !== '2D') return;
+    if (canvasRef.current && !fabricCanvas.current) {
+      const parent = canvasRef.current.parentElement;
+      const width = parent?.clientWidth || window.innerWidth;
+      const height = parent?.clientHeight || window.innerHeight;
+      fabricCanvas.current = new fabric.Canvas(canvasRef.current, { width, height, selection: false, preserveObjectStacking: true });
+      drawGrid(fabricCanvas.current);
+      fabricCanvas.current.absolutePan(new fabric.Point(-width/2, -height/2));
+    }
+    const canvas = fabricCanvas.current;
+    if (!canvas) return;
+
+    ['mouse:down', 'mouse:move', 'mouse:up', 'object:modified', 'selection:created', 'selection:cleared'].forEach(e => canvas.off(e));
+
+    let draggingHandle: { wallId: string, type: 'start' | 'end' } | null = null;
+    let isCameraDragging = false;
+    let lastPosX = 0; let lastPosY = 0;
+
+    if (activeMode === 'select') {
+      canvas.selection = true;
+      canvas.on('mouse:down', (e) => {
+        const evt = e.e as MouseEvent;
+        if (evt.altKey || evt.button === 1) { 
+          isCameraDragging = true; canvas.selection = false;
+          lastPosX = evt.clientX; lastPosY = evt.clientY; return;
+        }
+        if(e.target && e.target.name === 'wall-handle') {
+          draggingHandle = { wallId: e.target.data.wallId, type: e.target.data.type };
+          canvas.selection = false;
+        } else if (e.target) {
+          setSelectedObjectId(e.target.data.id); setSelectedObjectType(e.target.name as any);
+        } else {
+          setSelectedObjectId(null); setSelectedObjectType(null);
+        }
+      });
+
+      canvas.on('mouse:move', (e) => {
+        if (isCameraDragging) {
+          const evt = e.e as MouseEvent;
+          const vpt = canvas.viewportTransform!;
+          vpt[4] += evt.clientX - lastPosX; vpt[5] += evt.clientY - lastPosY;
+          canvas.requestRenderAll(); lastPosX = evt.clientX; lastPosY = evt.clientY; return;
+        }
+        if (draggingHandle) {
+          const pointer = canvas.getPointer(e.e);
+          const w = walls.find(w => w.id === draggingHandle!.wallId);
+          if (w) {
+            const refPoint = draggingHandle!.type === 'start' ? w.endPoint : w.startPoint;
+            const bypass = (e.e as MouseEvent).shiftKey;
+            const snapped = getSnappedPoint(pointer, refPoint, bypass);
+            
+            const sx = draggingHandle.type === 'start' ? snapped.x : w.startPoint.x;
+            const sy = draggingHandle.type === 'start' ? snapped.y : w.startPoint.y;
+            const ex = draggingHandle.type === 'end' ? snapped.x : w.endPoint.x;
+            const ey = draggingHandle.type === 'end' ? snapped.y : w.endPoint.y;
+            
+            const dx = ex - sx; const dy = ey - sy;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+            const wallGrp = canvas.getObjects().find(o => o.name === 'wall' && o.data?.id === w.id) as fabric.Group;
+            if (wallGrp) {
+                wallGrp.set({ left: sx + dx / 2, top: sy + dy / 2, angle: angle });
+                (wallGrp.item(0) as fabric.Rect).set({ width: length });
+                wallGrp.addWithUpdate();
+            }
+            if (e.target) e.target.set({ left: snapped.x, top: snapped.y });
+            
+            canvas.renderAll();
+          }
+        }
+      });
+
+      canvas.on('mouse:up', (e) => {
+        if (isCameraDragging) {
+          canvas.setViewportTransform(canvas.viewportTransform!);
+          isCameraDragging = false; canvas.selection = true; return;
+        }
+        if (draggingHandle) {
+          const pointer = canvas.getPointer(e.e);
+          const w = walls.find(w => w.id === draggingHandle!.wallId);
+          const refPoint = w ? (draggingHandle!.type === 'start' ? w.endPoint : w.startPoint) : undefined;
+          const bypass = (e.e as MouseEvent).shiftKey;
+          const snapped = getSnappedPoint(pointer, refPoint, bypass);
+          
+          setWalls(prev => prev.map(w => {
+            if (w.id === draggingHandle!.wallId) {
+                const sx = draggingHandle!.type === 'start' ? snapped.x : w.startPoint.x;
+                const sy = draggingHandle!.type === 'start' ? snapped.y : w.startPoint.y;
+                const ex = draggingHandle!.type === 'end' ? snapped.x : w.endPoint.x;
+                const ey = draggingHandle!.type === 'end' ? snapped.y : w.endPoint.y;
+                const updated = new Wall({x: sx, y: sy}, {x: ex, y: ey}, w.thickness, w.level);
+                updated.id = w.id; updated.elements = w.elements;
+                return updated;
+            }
+            return w;
+          }));
+          draggingHandle = null; canvas.selection = true;
+        }
+      });
+
+      canvas.on('object:modified', (e) => {
+        if (e.target && e.target.name === 'furniture') {
+          const id = e.target.data.id;
+          setFurniture(prev => prev.map(f => f.id === id ? { ...f, position: { x: e.target!.left || 0, y: e.target!.top || 0 }, angle: (e.target!.angle || 0) * (Math.PI/180) } : f));
+        }
+      });
+    } else {
+      canvas.selection = false; canvas.discardActiveObject(); setSelectedObjectId(null);
+    }
+
+    let drawStartX = 0; let drawStartY = 0;
+    if (activeMode === 'draw') {
+      canvas.on('mouse:down', (options) => {
+        const evt = options.e as MouseEvent;
+        if (evt.altKey || evt.button === 1) { 
+          isCameraDragging = true; lastPosX = evt.clientX; lastPosY = evt.clientY; return;
+        }
+        const pointer = canvas.getPointer(options.e);
+        const snapped = getSnappedPoint(pointer);
+        drawStartX = snapped.x; drawStartY = snapped.y;
+        
+        currentLineRef.current = createWallGraphic(drawStartX, drawStartY, drawStartX, drawStartY, 15);
+        canvas.add(currentLineRef.current);
+        isDrawingRef.current = true;
+      });
+
+      canvas.on('mouse:move', (options) => {
+        if (isCameraDragging) {
+          const evt = options.e as MouseEvent;
+          const vpt = canvas.viewportTransform!;
+          vpt[4] += evt.clientX - lastPosX; vpt[5] += evt.clientY - lastPosY;
+          canvas.requestRenderAll(); lastPosX = evt.clientX; lastPosY = evt.clientY; return;
+        }
+        if (!isDrawingRef.current || !currentLineRef.current) return;
+        const pointer = canvas.getPointer(options.e);
+        const bypass = (options.e as MouseEvent).shiftKey;
+        const snapped = getSnappedPoint(pointer, {x: drawStartX, y: drawStartY}, bypass);
+        
+        canvas.remove(currentLineRef.current);
+        currentLineRef.current = createWallGraphic(drawStartX, drawStartY, snapped.x, snapped.y, 15);
+        canvas.add(currentLineRef.current);
+        canvas.renderAll();
+      });
+
+      canvas.on('mouse:up', (options) => {
+        if (isCameraDragging) { canvas.setViewportTransform(canvas.viewportTransform!); isCameraDragging = false; return; }
+        if (isDrawingRef.current && currentLineRef.current) {
+          const pointer = canvas.getPointer(options.e);
+          const bypass = (options.e as MouseEvent).shiftKey;
+          const snapped = getSnappedPoint(pointer, {x: drawStartX, y: drawStartY}, bypass);
+          const newWall = new Wall({ x: drawStartX, y: drawStartY }, { x: snapped.x, y: snapped.y }, 15, currentLevel);
+          if (newWall.lengthPx > GRID_SIZE / 2) setWalls(prev => [...prev, newWall]);
+          canvas.remove(currentLineRef.current);
+        }
+        isDrawingRef.current = false; currentLineRef.current = null;
+      });
+    }
+
+    if (['door', 'window', 'garage'].includes(activeMode)) {
+      canvas.on('mouse:down', (options) => {
+        const evt = options.e as MouseEvent;
+        if (evt.altKey || evt.button === 1) { 
+          isCameraDragging = true; lastPosX = evt.clientX; lastPosY = evt.clientY; return;
+        }
+        if (options.target && options.target.name === 'wall') {
+          const wallId = options.target.data.id;
+          const pointer = canvas.getPointer(options.e);
+          setWalls(prevWalls => prevWalls.map(w => {
+            if (w.id === wallId) {
+              const dx = w.endPoint.x - w.startPoint.x; const dy = w.endPoint.y - w.startPoint.y;
+              const lenSq = dx*dx + dy*dy;
+              let t = ((pointer.x - w.startPoint.x) * dx + (pointer.y - w.startPoint.y) * dy) / lenSq;
+              t = Math.max(0.1, Math.min(0.9, t)); 
+              
+              let wSize = 120, hSize = 120, elev = 90;
+              if (activeMode === 'door') { wSize = 90; hSize = 210; elev = 0; }
+              if (activeMode === 'garage') { wSize = 250; hSize = 220; elev = 0; }
+
+              const newEl: WallElement = {
+                id: 'el-' + Date.now(), type: activeMode as ElementType, positionRatio: t,
+                width: wSize, height: hSize, elevation: elev
+              };
+              const updatedWall = new Wall(w.startPoint, w.endPoint, w.thickness, w.level);
+              updatedWall.id = w.id; updatedWall.elements = [...w.elements, newEl];
+              return updatedWall;
+            }
+            return w;
+          }));
+          setActiveMode('select');
+        }
+      });
+      canvas.on('mouse:move', (options) => {
+        if (isCameraDragging) {
+          const evt = options.e as MouseEvent;
+          const vpt = canvas.viewportTransform!;
+          vpt[4] += evt.clientX - lastPosX; vpt[5] += evt.clientY - lastPosY;
+          canvas.requestRenderAll(); lastPosX = evt.clientX; lastPosY = evt.clientY; return;
+        }
+      });
+      canvas.on('mouse:up', () => { isCameraDragging = false; canvas.setViewportTransform(canvas.viewportTransform!); });
+    }
+
+    const furnitureModes = ['toilet', 'sofa', 'bed', 'plant', 'stairs', 'column', 'table', 'chair', 'text', 'car', 'dining', 'tv', 'socket', 'lamp', 'shower'];
+    if (furnitureModes.includes(activeMode)) {
+      canvas.on('mouse:down', (options) => {
+        const evt = options.e as MouseEvent;
+        if (evt.altKey || evt.button === 1) { 
+          isCameraDragging = true; lastPosX = evt.clientX; lastPosY = evt.clientY; return;
+        }
+        const pointer = canvas.getPointer(options.e);
+        const sx = snapToGrid(pointer.x); const sy = snapToGrid(pointer.y);
+        const newFurn: FurnitureElement = { id: 'furn-' + Date.now(), type: activeMode as FurnitureType, position: { x: sx, y: sy }, angle: 0, level: currentLevel, label: activeMode === 'text' ? 'HABITACIÓN' : undefined };
+        setFurniture(prev => [...prev, newFurn]);
+        setActiveMode('select');
+      });
+      canvas.on('mouse:move', (options) => {
+        if (isCameraDragging) {
+          const evt = options.e as MouseEvent;
+          const vpt = canvas.viewportTransform!;
+          vpt[4] += evt.clientX - lastPosX; vpt[5] += evt.clientY - lastPosY;
+          canvas.requestRenderAll(); lastPosX = evt.clientX; lastPosY = evt.clientY; return;
+        }
+      });
+      canvas.on('mouse:up', () => { isCameraDragging = false; canvas.setViewportTransform(canvas.viewportTransform!); });
+    }
+    renderWalls2D();
+  }, [activeMode, viewMode, currentLevel, selectedObjectId, furniture, renderWalls2D]);
+
+  // ==========================================
+  // BABYLON 3D PBR RENDER ENGINE (FOTOREALISTA)
+  // ==========================================
+  useEffect(() => {
+    if (viewMode !== '3D') return;
+
+    let engine = babylonEngine.current;
+    if (!engine && engine3dRef.current) {
+      engine = new BABYLON.Engine(engine3dRef.current, true, { preserveDrawingBuffer: true, stencil: true });
+      babylonEngine.current = engine;
+      
+      const scene = new BABYLON.Scene(engine);
+      scene.clearColor = new BABYLON.Color4(0.9, 0.9, 0.92, 1);
+      babylonScene.current = scene;
+
+      const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 3.5, 20, BABYLON.Vector3.Zero(), scene);
+      camera.attachControl(engine3dRef.current, true);
+      camera.wheelPrecision = 20;
+      camera.lowerRadiusLimit = 1; // Permitir zoom extremo
+      camera.upperRadiusLimit = 100;
+      camera.panningSensibility = 500;
+
+      // Entorno Diorama
+      scene.clearColor = new BABYLON.Color4(0.89, 0.85, 0.78, 1); // Beige arquitectónico
+      
+      const hemiLight = new BABYLON.HemisphericLight("hemiLight", new BABYLON.Vector3(0, 1, 0), scene);
+      hemiLight.intensity = 0.5;
+      hemiLight.groundColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+
+      const dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(-0.5, -1, -0.5), scene);
+      dirLight.position = new BABYLON.Vector3(20, 40, 20);
+      dirLight.intensity = 1.0;
+      
+      const pointLight = new BABYLON.PointLight("pointLight", new BABYLON.Vector3(0, 2.5, 0), scene);
+      pointLight.diffuse = new BABYLON.Color3(1, 0.95, 0.85); // Luz cálida de interior
+      pointLight.intensity = 0.4;
+      
+      const shadowGenerator = new BABYLON.ShadowGenerator(2048, dirLight);
+      shadowGenerator.usePercentageCloserFiltering = true; // PCF Soft Shadows
+      shadowGenerator.setDarkness(0.2);
+      shadowGeneratorRef.current = shadowGenerator;
+
+      // Pipeline de Post-Procesado Arquitectónico PBR
+      const pipeline = new BABYLON.DefaultRenderingPipeline("defaultPipeline", true, scene, [camera]);
+      pipeline.samples = 4; // Antialiasing (MSAA)
+      pipeline.fxaaEnabled = true;
+      pipeline.imageProcessingEnabled = true;
+      pipeline.imageProcessing.toneMappingEnabled = true;
+      pipeline.imageProcessing.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
+      pipeline.imageProcessing.exposure = 1.0;
+      pipeline.imageProcessing.contrast = 1.1;
+
+      // SSAO (Oclusión Ambiental Avanzada)
+      const ssao = new BABYLON.SSAO2RenderingPipeline("ssao", scene, 1.0, [camera]);
+      ssao.radius = 2.0;
+      ssao.totalStrength = 1.2;
+      ssao.base = 0.5;
+      
+      const manager = new BABYLON.GizmoManager(scene);
+      manager.positionGizmoEnabled = true;
+      manager.rotationGizmoEnabled = true;
+      manager.boundingBoxGizmoEnabled = false;
+      manager.attachableMeshes = []; 
+      gizmoManager.current = manager;
+
+      engine.runRenderLoop(() => { scene.render(); });
+      window.addEventListener('resize', () => engine?.resize());
+    }
+
+    const scene = babylonScene.current;
+    const shadowGen = shadowGeneratorRef.current;
+    if(!scene || !shadowGen) return;
+    
+    wallMeshes.current.forEach(mesh => mesh.dispose()); wallMeshes.current = [];
+    glbMeshes.current.forEach(mesh => mesh.dispose()); glbMeshes.current = [];
+
+    // MATERIALES PBR
+    const wallMaterial = new BABYLON.PBRMaterial("wallMat", scene);
+    wallMaterial.albedoColor = new BABYLON.Color3(0.92, 0.92, 0.90); // Estuco cálido
+    wallMaterial.roughness = 0.9;
+    wallMaterial.metallic = 0.0;
+
+    const blackFrameMat = new BABYLON.PBRMaterial("blackFrame", scene);
+    blackFrameMat.albedoColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+    blackFrameMat.roughness = 0.4;
+    blackFrameMat.metallic = 0.2;
+
+    const whiteFrameMat = new BABYLON.PBRMaterial("whiteFrame", scene);
+    whiteFrameMat.albedoColor = new BABYLON.Color3(0.95, 0.95, 0.95); 
+    whiteFrameMat.roughness = 0.5;
+    whiteFrameMat.metallic = 0.1;
+    
+    const glassMat = new BABYLON.PBRMaterial("glassMat", scene);
+    glassMat.albedoColor = new BABYLON.Color3(0.8, 0.9, 1.0);
+    glassMat.roughness = 0.05;
+    glassMat.metallic = 0.1;
+    glassMat.alpha = 0.3;
+    glassMat.indexOfRefraction = 1.5;
+
+    const metalGarageMat = new BABYLON.PBRMaterial("metalGarage", scene);
+    metalGarageMat.albedoColor = new BABYLON.Color3(0.6, 0.6, 0.62);
+    metalGarageMat.roughness = 0.4;
+    metalGarageMat.metallic = 0.8;
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    walls.forEach(w => {
+      minX = Math.min(minX, w.startPoint.x, w.endPoint.x); maxX = Math.max(maxX, w.startPoint.x, w.endPoint.x);
+      minY = Math.min(minY, w.startPoint.y, w.endPoint.y); maxY = Math.max(maxY, w.startPoint.y, w.endPoint.y);
+    });
+    const centerX = isFinite(minX) ? (minX + maxX) / 2 : 0;
+    const centerY = isFinite(minY) ? (minY + maxY) / 2 : 0;
+    const cxMeters = centerX / PIXELS_PER_METER;
+    const czMeters = -centerY / PIXELS_PER_METER;
+    
+    // Si no hay muros, asignar un tamaño básico
+    const bbWidthM = isFinite(maxX) ? (maxX - minX + 20) / PIXELS_PER_METER : 20;
+    const bbHeightM = isFinite(maxY) ? (maxY - minY + 20) / PIXELS_PER_METER : 20;
+
+    if(scene.activeCamera) (scene.activeCamera as BABYLON.ArcRotateCamera).setTarget(new BABYLON.Vector3(cxMeters, 0, czMeters));
+    
+    // Suelo delimitado estilo maqueta
+    const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: bbWidthM, height: bbHeightM }, scene);
+    ground.position.x = cxMeters; ground.position.z = czMeters;
+    ground.receiveShadows = true; 
+    
+    const groundMat = new BABYLON.PBRMaterial("groundMat", scene);
+    const woodTex = new BABYLON.Texture("https://playground.babylonjs.com/textures/wood.jpg", scene);
+    woodTex.uScale = 20; woodTex.vScale = 20;
+    groundMat.albedoTexture = woodTex;
+    groundMat.roughness = 0.2;
+    groundMat.metallic = 0.05;
+    ground.material = groundMat;
+    wallMeshes.current.push(ground);
+
+    walls.forEach((wall) => {
+      const dx = wall.endPoint.x - wall.startPoint.x; const dy = wall.endPoint.y - wall.startPoint.y;
+      const lengthPx = Math.sqrt(dx * dx + dy * dy);
+      const lengthM = lengthPx / PIXELS_PER_METER;
+      const angle = Math.atan2(dy, dx);
+      const wx = wall.startPoint.x + dx / 2; const wy = wall.startPoint.y + dy / 2;
+      const levelBaseY = (wall.level - 1) * FLOOR_HEIGHT_M;
+
+      let wallMesh = BABYLON.MeshBuilder.CreateBox(`wall_${wall.id}`, { width: lengthM, height: FLOOR_HEIGHT_M, depth: 0.15 }, scene);
+
+      if (wall.elements.length > 0) {
+        let wallCSG = BABYLON.CSG.FromMesh(wallMesh);
+        wall.elements.forEach(el => {
+          const wM = el.width / 100; const hM = el.height / 100; const eleM = el.elevation / 100;
+          const relativeX = (el.positionRatio - 0.5) * lengthM;
+          const relativeY = (hM / 2) + eleM - (FLOOR_HEIGHT_M / 2);
+
+          const holeMesh = BABYLON.MeshBuilder.CreateBox("hole", { width: wM, height: hM, depth: 0.3 }, scene);
+          holeMesh.position.x = relativeX; holeMesh.position.y = relativeY; 
+          const holeCSG = BABYLON.CSG.FromMesh(holeMesh);
+          wallCSG = wallCSG.subtract(holeCSG);
+          holeMesh.dispose();
+
+          const absX = (wx / PIXELS_PER_METER) + relativeX * Math.cos(-angle);
+          const absZ = (-wy / PIXELS_PER_METER) - relativeX * Math.sin(-angle);
+          const absY = (FLOOR_HEIGHT_M / 2) + levelBaseY + relativeY;
+
+          if (el.type === 'garage') {
+             // Puerta de Garaje PBR
+             const garageDoor = BABYLON.MeshBuilder.CreateBox(`garage_${el.id}`, { width: wM, height: hM, depth: 0.1 }, scene);
+             garageDoor.material = metalGarageMat;
+             garageDoor.position.set(absX, absY, absZ);
+             garageDoor.rotation.y = -angle;
+             shadowGen.addShadowCaster(garageDoor); garageDoor.receiveShadows = true;
+             wallMeshes.current.push(garageDoor);
+          } else {
+             const isDoor = el.type === 'door';
+             const frameThickness = 0.05;
+             const frameMesh = BABYLON.MeshBuilder.CreateBox(`frame_${el.id}`, { width: wM, height: hM, depth: 0.18 }, scene);
+             const innerHole = BABYLON.MeshBuilder.CreateBox("innerHole", { width: wM - frameThickness*2, height: hM - (isDoor? frameThickness : frameThickness*2), depth: 0.2 }, scene);
+             if (isDoor) innerHole.position.y = -frameThickness/2;
+             
+             const fCSG = BABYLON.CSG.FromMesh(frameMesh);
+             const iCSG = BABYLON.CSG.FromMesh(innerHole);
+             const finalFrameCSG = fCSG.subtract(iCSG);
+             
+             const finalFrame = finalFrameCSG.toMesh(`finalFrame_${el.id}`, isDoor ? whiteFrameMat : blackFrameMat, scene);
+             frameMesh.dispose(); innerHole.dispose();
+             
+             finalFrame.position.set(absX, absY, absZ);
+             finalFrame.rotation.y = -angle;
+             shadowGen.addShadowCaster(finalFrame);
+             wallMeshes.current.push(finalFrame);
+   
+             const panel = BABYLON.MeshBuilder.CreateBox(`panel_${el.id}`, { width: wM - frameThickness*2, height: hM - (isDoor? frameThickness : frameThickness*2), depth: 0.04 }, scene);
+             panel.material = isDoor ? whiteFrameMat : glassMat;
+             panel.position.set(absX, absY + (isDoor ? -frameThickness/2 : 0), absZ);
+             panel.rotation.y = -angle;
+             if (isDoor) shadowGen.addShadowCaster(panel);
+             wallMeshes.current.push(panel);
+          }
+        });
+
+        const newWallMesh = wallCSG.toMesh(`wall_csg_${wall.id}`, wallMaterial, scene, true);
+        wallMesh.dispose(); 
+        wallMesh = newWallMesh;
+      } else {
+        wallMesh.material = wallMaterial;
+      }
+
+      wallMesh.position.x = wx / PIXELS_PER_METER;
+      wallMesh.position.z = -wy / PIXELS_PER_METER;
+      wallMesh.position.y = (FLOOR_HEIGHT_M / 2) + levelBaseY;
+      wallMesh.rotation.y = -angle; 
+      wallMesh.receiveShadows = true;
+      shadowGen.addShadowCaster(wallMesh);
+      wallMeshes.current.push(wallMesh);
+      
+      // Tope Oscuro del Muro (Diorama Effect)
+      const topWall = BABYLON.MeshBuilder.CreateBox(`topWall_${wall.id}`, { width: lengthM, height: 0.04, depth: 0.15 }, scene);
+      topWall.position.x = wx / PIXELS_PER_METER;
+      topWall.position.z = -wy / PIXELS_PER_METER;
+      topWall.position.y = FLOOR_HEIGHT_M + levelBaseY + 0.02;
+      topWall.rotation.y = -angle;
+      topWall.material = blackFrameMat;
+      wallMeshes.current.push(topWall);
+    });
+
+    if (gizmoManager.current) gizmoManager.current.attachableMeshes = [];
+
+    const createHighDefFurniture = (f: FurnitureElement, scene: BABYLON.Scene): BABYLON.Mesh => {
+      const root = BABYLON.MeshBuilder.CreateBox("root_" + f.id, { width: 0.1, height: 0.1, depth: 0.1 }, scene);
+      root.isVisible = false;
+      
+      const woodMat = new BABYLON.PBRMaterial("woodMat", scene); woodMat.albedoColor = new BABYLON.Color3(0.4, 0.25, 0.15); woodMat.roughness = 0.3; woodMat.metallic = 0.0;
+      const fabricMat = new BABYLON.PBRMaterial("fabMat", scene); fabricMat.albedoColor = new BABYLON.Color3(0.4, 0.45, 0.5); fabricMat.roughness = 0.9; fabricMat.metallic = 0.0;
+      const whiteMat = new BABYLON.PBRMaterial("wMat", scene); whiteMat.albedoColor = new BABYLON.Color3(0.95, 0.95, 0.95); whiteMat.roughness = 0.4; whiteMat.metallic = 0.1;
+      const darkMat = new BABYLON.PBRMaterial("darkMat", scene); darkMat.albedoColor = new BABYLON.Color3(0.1, 0.1, 0.1); darkMat.roughness = 0.3; darkMat.metallic = 0.2;
+
+      if (f.type === 'bed') {
+        const bedFrame = BABYLON.MeshBuilder.CreateBox("bf", { width: 1.7, height: 0.3, depth: 2.2 }, scene); bedFrame.material = woodMat; bedFrame.position.y = 0.15;
+        const mattress = BABYLON.MeshBuilder.CreateBox("mat", { width: 1.6, height: 0.25, depth: 2.1 }, scene); mattress.position.y = 0.4; mattress.material = whiteMat;
+        const pillow1 = BABYLON.MeshBuilder.CreateBox("pil1", { width: 0.6, height: 0.12, depth: 0.4 }, scene); pillow1.position.set(-0.35, 0.55, 0.7); pillow1.material = whiteMat;
+        const pillow2 = BABYLON.MeshBuilder.CreateBox("pil2", { width: 0.6, height: 0.12, depth: 0.4 }, scene); pillow2.position.set(0.35, 0.55, 0.7); pillow2.material = whiteMat;
+        [bedFrame, mattress, pillow1, pillow2].forEach(m => { m.parent = root; shadowGen.addShadowCaster(m); m.receiveShadows = true; });
+      } else if (f.type === 'sofa') {
+        const base = BABYLON.MeshBuilder.CreateBox("base", { width: 2.4, height: 0.2, depth: 0.9 }, scene); base.position.y = 0.2;
+        const cushions = BABYLON.MeshBuilder.CreateBox("cushions", { width: 2.2, height: 0.2, depth: 0.8 }, scene); cushions.position.y = 0.4;
+        const back = BABYLON.MeshBuilder.CreateBox("back", { width: 2.4, height: 0.6, depth: 0.2 }, scene); back.position.set(0, 0.6, 0.35);
+        const arm1 = BABYLON.MeshBuilder.CreateBox("arm1", { width: 0.2, height: 0.5, depth: 0.9 }, scene); arm1.position.set(1.1, 0.45, 0);
+        const arm2 = BABYLON.MeshBuilder.CreateBox("arm2", { width: 0.2, height: 0.5, depth: 0.9 }, scene); arm2.position.set(-1.1, 0.45, 0);
+        [base, cushions, back, arm1, arm2].forEach(m => { m.material = fabricMat; m.parent = root; shadowGen.addShadowCaster(m); m.receiveShadows = true; });
+      } else if (f.type === 'table') {
+        const top = BABYLON.MeshBuilder.CreateBox("top", { width: 1.6, height: 0.05, depth: 0.9 }, scene); top.position.y = 0.8;
+        const p1 = BABYLON.MeshBuilder.CreateBox("p1", { width: 0.05, height: 0.8, depth: 0.05 }, scene); p1.position.set(0.7, 0.4, 0.35);
+        const p2 = BABYLON.MeshBuilder.CreateBox("p2", { width: 0.05, height: 0.8, depth: 0.05 }, scene); p2.position.set(-0.7, 0.4, 0.35);
+        const p3 = BABYLON.MeshBuilder.CreateBox("p3", { width: 0.05, height: 0.8, depth: 0.05 }, scene); p3.position.set(0.7, 0.4, -0.35);
+        const p4 = BABYLON.MeshBuilder.CreateBox("p4", { width: 0.05, height: 0.8, depth: 0.05 }, scene); p4.position.set(-0.7, 0.4, -0.35);
+        [top, p1, p2, p3, p4].forEach(m => { m.material = woodMat; m.parent = root; shadowGen.addShadowCaster(m); m.receiveShadows = true; });
+      } else if (f.type === 'chair') {
+        const seat = BABYLON.MeshBuilder.CreateBox("seat", { width: 0.5, height: 0.05, depth: 0.5 }, scene); seat.position.y = 0.45; 
+        const back = BABYLON.MeshBuilder.CreateBox("back", { width: 0.5, height: 0.5, depth: 0.05 }, scene); back.position.set(0, 0.7, 0.225);
+        const p1 = BABYLON.MeshBuilder.CreateBox("p1", { width: 0.04, height: 0.45, depth: 0.04 }, scene); p1.position.set(0.2, 0.225, 0.2);
+        const p2 = BABYLON.MeshBuilder.CreateBox("p2", { width: 0.04, height: 0.45, depth: 0.04 }, scene); p2.position.set(-0.2, 0.225, 0.2);
+        const p3 = BABYLON.MeshBuilder.CreateBox("p3", { width: 0.04, height: 0.45, depth: 0.04 }, scene); p3.position.set(0.2, 0.225, -0.2);
+        const p4 = BABYLON.MeshBuilder.CreateBox("p4", { width: 0.04, height: 0.45, depth: 0.04 }, scene); p4.position.set(-0.2, 0.225, -0.2);
+        [seat, back, p1, p2, p3, p4].forEach(m => { m.material = darkMat; m.parent = root; shadowGen.addShadowCaster(m); m.receiveShadows = true; });
+      } else if (f.type === 'dining') {
+        const top = BABYLON.MeshBuilder.CreateBox("top", { width: 2.0, height: 0.05, depth: 1.0 }, scene); top.position.y = 0.8; top.material = woodMat;
+        const leg = BABYLON.MeshBuilder.CreateBox("leg", { width: 0.4, height: 0.8, depth: 0.4 }, scene); leg.position.y = 0.4; leg.material = darkMat;
+        [top, leg].forEach(m => { m.parent = root; shadowGen.addShadowCaster(m); m.receiveShadows = true; });
+        for(let i=0; i<6; i++) {
+            const sx = i < 3 ? -0.6 + (i*0.6) : -0.6 + ((i-3)*0.6);
+            const sz = i < 3 ? 0.7 : -0.7;
+            const cRoot = createHighDefFurniture({ ...f, type: 'chair', id: f.id + '_c' + i }, scene);
+            cRoot.parent = root; cRoot.position.set(sx, 0, sz);
+            if(i>=3) cRoot.rotation.y = Math.PI;
+        }
+      } else if (f.type === 'toilet') {
+        const base = BABYLON.MeshBuilder.CreateCylinder("base", { diameter: 0.4, height: 0.45 }, scene); base.position.set(0, 0.225, -0.1);
+        const tank = BABYLON.MeshBuilder.CreateBox("tank", { width: 0.5, height: 0.5, depth: 0.2 }, scene); tank.position.set(0, 0.4, 0.2);
+        [base, tank].forEach(m => { m.material = whiteMat; m.parent = root; shadowGen.addShadowCaster(m); m.receiveShadows = true; });
+      } else if (f.type === 'plant') {
+        const pot = BABYLON.MeshBuilder.CreateCylinder("pot", { diameter: 0.4, height: 0.4 }, scene); pot.position.y = 0.2; pot.material = whiteMat;
+        const leafMat = new BABYLON.PBRMaterial("leaf", scene); leafMat.albedoColor = new BABYLON.Color3(0.2, 0.5, 0.2); leafMat.roughness = 0.6; leafMat.metallic = 0;
+        const leaves = BABYLON.MeshBuilder.CreateSphere("leaves", { diameterX: 0.8, diameterY: 1.2, diameterZ: 0.8 }, scene); leaves.position.y = 0.8; leaves.material = leafMat;
+        [pot, leaves].forEach(m => { m.parent = root; shadowGen.addShadowCaster(m); m.receiveShadows = true; });
+      } else if (f.type === 'column') {
+        const col = BABYLON.MeshBuilder.CreateBox("col", { width: 0.4, height: FLOOR_HEIGHT_M, depth: 0.4 }, scene);
+        col.parent = root; col.position.y = FLOOR_HEIGHT_M / 2; col.material = whiteMat;
+        shadowGen.addShadowCaster(col); col.receiveShadows = true;
+      } else if (f.type === 'car') {
+        const carMat = new BABYLON.PBRMaterial("carMat", scene); carMat.albedoColor = new BABYLON.Color3(0.2, 0.2, 0.7); carMat.roughness = 0.1; carMat.metallic = 0.9;
+        const base = BABYLON.MeshBuilder.CreateBox("cbase", { width: 1.8, height: 0.5, depth: 4.2 }, scene); base.position.y = 0.35; base.material = carMat;
+        const cabin = BABYLON.MeshBuilder.CreateBox("cabin", { width: 1.6, height: 0.6, depth: 2.0 }, scene); cabin.position.set(0, 0.9, 0.2); cabin.material = darkMat;
+        [base, cabin].forEach(m => { m.parent = root; shadowGen.addShadowCaster(m); m.receiveShadows = true; });
+        const wMat = new BABYLON.PBRMaterial("w", scene); wMat.albedoColor = new BABYLON.Color3(0.05, 0.05, 0.05); wMat.roughness = 0.8; wMat.metallic = 0.1;
+        [[-1, 1.2], [1, 1.2], [-1, -1.2], [1, -1.2]].forEach(pos => {
+            const w = BABYLON.MeshBuilder.CreateCylinder("wheel", { diameter: 0.6, height: 0.2 }, scene);
+            w.rotation.z = Math.PI/2; w.position.set(pos[0]*0.9, 0.3, pos[1]); w.material = wMat; w.parent = root;
+        });
+      } else if (f.type === 'tv') {
+        const screen = BABYLON.MeshBuilder.CreateBox("sc", { width: 1.6, height: 0.9, depth: 0.05 }, scene); screen.position.y = 0.8; screen.material = darkMat;
+        const stand = BABYLON.MeshBuilder.CreateBox("st", { width: 0.4, height: 0.05, depth: 0.3 }, scene); stand.position.y = 0.025; stand.material = darkMat;
+        const pole = BABYLON.MeshBuilder.CreateBox("po", { width: 0.1, height: 0.4, depth: 0.05 }, scene); pole.position.y = 0.2; pole.material = darkMat;
+        [screen, stand, pole].forEach(m => { m.parent = root; shadowGen.addShadowCaster(m); m.receiveShadows = true; });
+      } else if (f.type === 'socket') {
+        const sock = BABYLON.MeshBuilder.CreateBox("sock", { width: 0.15, height: 0.15, depth: 0.02 }, scene);
+        sock.position.set(0, 0.3, 0); sock.material = whiteMat;
+        sock.parent = root;
+      } else if (f.type === 'lamp') {
+        const base = BABYLON.MeshBuilder.CreateCylinder("base", { diameter: 0.3, height: 0.05 }, scene); base.position.y = 0.025; base.material = darkMat;
+        const pole = BABYLON.MeshBuilder.CreateCylinder("pole", { diameter: 0.03, height: 1.6 }, scene); pole.position.y = 0.8; pole.material = darkMat;
+        const shade = BABYLON.MeshBuilder.CreateCylinder("shade", { diameterTop: 0.2, diameterBottom: 0.5, height: 0.4 }, scene); shade.position.y = 1.6; shade.material = whiteMat;
+        [base, pole, shade].forEach(m => { m.parent = root; shadowGen.addShadowCaster(m); m.receiveShadows = true; });
+      } else if (f.type === 'shower') {
+        const base = BABYLON.MeshBuilder.CreateBox("sbase", { width: 0.9, height: 0.1, depth: 0.9 }, scene); base.position.y = 0.05; base.material = whiteMat;
+        const gMat = new BABYLON.PBRMaterial("glassShower", scene); gMat.albedoColor = new BABYLON.Color3(0.9, 0.95, 1.0); gMat.alpha = 0.2; gMat.roughness = 0.1; gMat.metallic = 0.2; gMat.indexOfRefraction = 1.5;
+        const glass1 = BABYLON.MeshBuilder.CreateBox("g1", { width: 0.9, height: 2.0, depth: 0.02 }, scene); glass1.position.set(0, 1.05, 0.44); glass1.material = gMat;
+        const glass2 = BABYLON.MeshBuilder.CreateBox("g2", { width: 0.02, height: 2.0, depth: 0.9 }, scene); glass2.position.set(0.44, 1.05, 0); glass2.material = gMat;
+        [base, glass1, glass2].forEach(m => { m.parent = root; m.receiveShadows = true; }); shadowGen.addShadowCaster(base);
+      }
+      return root;
+    };
+
+    furniture.forEach(f => {
+      if (f.type === 'text') return;
+      const levelBaseY = (f.level - 1) * FLOOR_HEIGHT_M;
+      const posX = f.position.x / PIXELS_PER_METER;
+      const posZ = -f.position.y / PIXELS_PER_METER;
+
+      const root = createHighDefFurniture(f, scene);
+      root.position.x = posX; root.position.z = posZ; root.position.y = levelBaseY;
+      root.rotation.y = -f.angle;
+      glbMeshes.current.push(root);
+      if (gizmoManager.current && f.type !== 'column') gizmoManager.current.attachableMeshes!.push(root as any);
+    });
+  }, [viewMode, walls, furniture]);
+
+  const updateElementProp = (type: 'width' | 'height' | 'elevation' | 'label', val: any) => {
+    if(!selectedObjectId) return;
+    if (selectedObjectType === 'furniture') {
+       setFurniture(prev => prev.map(f => f.id === selectedObjectId ? { ...f, [type]: val } : f));
+       return;
+    }
+    setWalls(prev => prev.map(w => {
+      const elIndex = w.elements.findIndex(el => el.id === selectedObjectId);
+      if(elIndex > -1) {
+        const updated = new Wall(w.startPoint, w.endPoint, w.thickness, w.level);
+        updated.id = w.id;
+        updated.elements = w.elements.map(el => el.id === selectedObjectId ? { ...el, [type]: val } : el);
+        return updated;
+      }
+      return w;
+    }));
+  };
+
+  const updateWallLength = (newMeters: number) => {
+    if(!selectedObjectId || newMeters <= 0.1) return;
+    setWalls(prev => prev.map(w => {
+      if (w.id === selectedObjectId) {
+        const dx = w.endPoint.x - w.startPoint.x;
+        const dy = w.endPoint.y - w.startPoint.y;
+        const angle = Math.atan2(dy, dx);
+        const newPx = newMeters * PIXELS_PER_METER;
+        
+        const newEndX = w.startPoint.x + Math.cos(angle) * newPx;
+        const newEndY = w.startPoint.y + Math.sin(angle) * newPx;
+
+        const updated = new Wall(w.startPoint, { x: newEndX, y: newEndY }, w.thickness, w.level);
+        updated.id = w.id;
+        updated.elements = w.elements;
+        return updated;
+      }
+      return w;
+    }));
+  };
+
+  const getSelectedElement = () => {
+    for(const w of walls) {
+      const el = w.elements.find(e => e.id === selectedObjectId);
+      if(el) return el;
+    }
+    return null;
+  };
+  const selectedEl = getSelectedElement();
+  const selectedWall = walls.find(w => w.id === selectedObjectId);
+  const selectedFurn = furniture.find(f => f.id === selectedObjectId);
+
+  const filteredSymbols = SYMBOLS.filter(s => s.label.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const downloadPDF = () => {
+    if (!fabricCanvas.current || viewMode !== '2D') return;
+    const canvas = fabricCanvas.current;
+    const prevZoom = canvas.getZoom();
+    const prevVpt = [...canvas.viewportTransform!];
+    
+    // Zoom para encajar todo el plano (simplificado)
+    canvas.setZoom(1);
+    
+    // Calcular Bounding Box basado solo en paredes y muebles (ignorando la cuadrícula infinita)
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    walls.forEach(w => {
+      minX = Math.min(minX, w.startPoint.x, w.endPoint.x);
+      maxX = Math.max(maxX, w.startPoint.x, w.endPoint.x);
+      minY = Math.min(minY, w.startPoint.y, w.endPoint.y);
+      maxY = Math.max(maxY, w.startPoint.y, w.endPoint.y);
+    });
+    
+    furniture.forEach(f => {
+      minX = Math.min(minX, f.position.x - 50);
+      maxX = Math.max(maxX, f.position.x + 50);
+      minY = Math.min(minY, f.position.y - 50);
+      maxY = Math.max(maxY, f.position.y + 50);
+    });
+
+    if (minX === Infinity) return;
+    
+    // Margen amplio para incluir cotas y textos
+    const padding = 150;
+    minX -= padding; minY -= padding;
+    maxX += padding; maxY += padding;
+    const w = maxX - minX; const h = maxY - minY;
+    
+    // Pan temporal
+    canvas.viewportTransform = [1, 0, 0, 1, -minX, -minY];
+    canvas.renderAll();
+    
+    const dataUrl = canvas.toDataURL({ format: 'jpeg', quality: 1.0, width: w, height: h });
+    
+    canvas.setViewportTransform(prevVpt);
+    canvas.setZoom(prevZoom);
+    canvas.renderAll();
+    
+    const pdf = new jsPDF(w > h ? 'landscape' : 'portrait', 'px', [w, h]);
+    pdf.addImage(dataUrl, 'JPEG', 0, 0, w, h);
+    pdf.save("plano-2d.pdf");
+  };
+
+  return (
+    <div className="flex flex-col w-screen h-screen overflow-hidden bg-[#e5e5e5]">
+      <Toolbar activeMode={activeMode} viewMode={viewMode} currentLevel={currentLevel} onModeChange={setActiveMode} onViewChange={setViewMode} onLevelChange={setCurrentLevel} onClearAll={() => { if (confirm("¿Limpiar todo el proyecto?")) { setWalls([]); setFurniture([]); } }} onDownloadPDF={downloadPDF} />
+      
+      <div className="flex-1 relative flex">
+        <div className="w-64 bg-white border-r border-gray-300 shadow-sm z-20 flex flex-col font-sans overflow-hidden">
+          
+          <div className="p-4 border-b border-gray-200">
+            <h2 className="text-sm font-bold text-gray-800 mb-2">Symbols</h2>
+            {viewMode === '2D' ? (
+              <div className="flex flex-col gap-3">
+                <div className="relative">
+                  <Search size={14} className="absolute left-2 top-2.5 text-gray-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Search for symbols..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:border-yellow-400"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                  {filteredSymbols.map(sym => (
+                    <button 
+                      key={sym.id}
+                      onClick={() => setActiveMode(sym.id as ToolMode)} 
+                      className={`flex flex-col items-center justify-center p-2 border rounded hover:bg-yellow-50 ${sym.span ? 'col-span-2' : ''} ${activeMode === sym.id ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200'}`}
+                    >
+                      {sym.icon} <span className="text-[10px]">{sym.label}</span>
+                    </button>
+                  ))}
+                  {filteredSymbols.length === 0 && <p className="text-xs text-gray-400 col-span-2 text-center py-2">No symbols found</p>}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">Los símbolos se agregan desde la Planta 2D.</p>
+            )}
+          </div>
+
+          <div className="p-4 flex-1 overflow-y-auto bg-[#f8f9fa]">
+            <h2 className="text-sm font-bold text-gray-800 mb-2">Properties</h2>
+            {!selectedObjectId && (
+               <p className="text-xs text-gray-600 italic">Selecciona un elemento para editar.</p>
+            )}
+            {selectedObjectType === 'wall' && selectedWall && (
+              <div className="text-sm text-gray-700 bg-white p-3 border border-gray-200 rounded">
+                <p className="font-semibold mb-3 text-blue-600">Wall (Muro)</p>
+                <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+                  Tip: Selecciona los círculos naranjas en los extremos del muro en el plano y arrástralos para estirar la pared libremente. (Mantén Shift para ángulos diagonales).
+                </p>
+                <label className="flex flex-col text-xs font-semibold gap-1 text-gray-600 mb-2">
+                  Longitud Exacta (m)
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={((selectedWall.lengthPx || 0) / PIXELS_PER_METER).toFixed(2)} 
+                    onChange={e => updateWallLength(Number(e.target.value))} 
+                    className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-yellow-400" 
+                  />
+                </label>
+                <p className="text-xs text-gray-500 mt-2">Piso: {currentLevel}</p>
+              </div>
+            )}
+            {selectedObjectType === 'element' && selectedEl && (
+              <div className="text-sm text-gray-700 flex flex-col gap-3 bg-white p-3 border border-gray-200 rounded">
+                <p className="font-semibold capitalize text-blue-600">{selectedEl.type}</p>
+                <label className="flex flex-col text-xs font-semibold gap-1 text-gray-600">
+                  Ancho (cm)
+                  <input type="number" value={selectedEl.width} onChange={e => updateElementProp('width', Number(e.target.value))} className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-yellow-400" />
+                </label>
+                <label className="flex flex-col text-xs font-semibold gap-1 text-gray-600">
+                  Alto (cm)
+                  <input type="number" value={selectedEl.height} onChange={e => updateElementProp('height', Number(e.target.value))} className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-yellow-400" />
+                </label>
+                <label className="flex flex-col text-xs font-semibold gap-1 text-gray-600">
+                  Elevación (cm)
+                  <input type="number" value={selectedEl.elevation} onChange={e => updateElementProp('elevation', Number(e.target.value))} className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-yellow-400" />
+                </label>
+              </div>
+            )}
+            {selectedObjectType === 'furniture' && selectedFurn && (
+              <div className="text-sm text-gray-700 bg-white p-3 border border-gray-200 rounded">
+                <p className="font-semibold mb-3 text-blue-600 capitalize">{selectedFurn.type}</p>
+                
+                {selectedFurn.type === 'text' && (
+                  <label className="flex flex-col text-xs font-semibold gap-1 text-gray-600 mb-2">
+                    Etiqueta (Texto)
+                    <input 
+                      type="text" 
+                      value={selectedFurn.label || ''} 
+                      onChange={e => updateElementProp('label', e.target.value)} 
+                      className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-yellow-400" 
+                    />
+                  </label>
+                )}
+
+                {selectedFurn.type === 'column' ? (
+                  <p className="text-xs text-gray-600">Elemento estructural fijo. Los muros dibujados cerca se ajustarán magnéticamente a su centro.</p>
+                ) : (
+                  <p className="text-xs text-gray-600">Para escalar y rotar libremente, usa los controles interactivos en la vista 3D.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 relative bg-[#e5e5e5]">
+          <div className="absolute inset-0 transition-opacity duration-300" style={{ opacity: viewMode === '2D' ? 1 : 0, pointerEvents: viewMode === '2D' ? 'auto' : 'none', zIndex: viewMode === '2D' ? 10 : 1 }}>
+            <canvas ref={canvasRef} className="block w-full h-full cursor-crosshair" />
+          </div>
+          <div className="absolute inset-0 transition-opacity duration-300 bg-[#e5e5e5]" style={{ opacity: viewMode === '3D' ? 1 : 0, pointerEvents: viewMode === '3D' ? 'auto' : 'none', zIndex: viewMode === '3D' ? 10 : 1 }}>
+            <canvas ref={engine3dRef} className="block w-full h-full outline-none touch-none" />
+            <div className="absolute bottom-4 right-4 bg-black/60 text-white text-xs px-3 py-2 rounded pointer-events-none backdrop-blur-sm border border-white/10 shadow-lg">
+              <span className="font-bold block mb-1">Controles 3D:</span>
+              Haz clic izquierdo sobre los muebles para revelar los controles de escala, rotación y posición.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CadWorkspace;

@@ -1,0 +1,21 @@
+# .NET Core
+bin/
+obj/
+appsettings.Development.json
+
+# Node/React
+node_modules/
+dist/
+build/
+.env
+.env.local
+
+# Visual Studio / VS Code
+.vscode/
+.vs/
+*.user
+*.suo
+
+# OS generated files
+.DS_Store
+Thumbs.db
