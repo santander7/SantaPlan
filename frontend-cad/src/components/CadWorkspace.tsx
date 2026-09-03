@@ -22,12 +22,15 @@ const SYMBOLS = [
   { id: 'sofa', icon: <Sofa size={20} className="mb-1 text-gray-600" />, label: 'Sofa' },
   { id: 'toilet', icon: <Toilet size={20} className="mb-1 text-gray-600" />, label: 'Toilet' },
   { id: 'plant', icon: <TreeDeciduous size={20} className="mb-1 text-gray-600" />, label: 'Plant' },
+  { id: 'tree', icon: <TreeDeciduous size={20} className="mb-1 text-gray-600" />, label: 'Árbol Ext.' },
   { id: 'table', icon: <Table2 size={20} className="mb-1 text-gray-600" />, label: 'Table' },
   { id: 'chair', icon: <Armchair size={20} className="mb-1 text-gray-600" />, label: 'Chair' },
   { id: 'dining', icon: <Utensils size={20} className="mb-1 text-gray-600" />, label: 'Comedor' },
+  { id: 'kitchen', icon: <Utensils size={20} className="mb-1 text-gray-600" />, label: 'Cocina' },
   { id: 'tv', icon: <Monitor size={20} className="mb-1 text-gray-600" />, label: 'TV' },
   { id: 'lamp', icon: <Lightbulb size={20} className="mb-1 text-gray-600" />, label: 'Lámpara' },
   { id: 'shower', icon: <Bath size={20} className="mb-1 text-gray-600" />, label: 'Ducha' },
+  { id: 'bathtub', icon: <Bath size={20} className="mb-1 text-gray-600" />, label: 'Bañera' },
   { id: 'socket', icon: <Plug size={20} className="mb-1 text-gray-600" />, label: 'Enchufe' },
   { id: 'car', icon: <Car size={20} className="mb-1 text-gray-600" />, label: 'Auto', span: true },
   { id: 'stairs', icon: <ArrowUpToLine size={20} className="mb-1 text-gray-600" />, label: 'Stairs', span: true },
@@ -51,7 +54,17 @@ export const CadWorkspace: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('2D');
   const [currentLevel, setCurrentLevel] = useState<number>(1);
   const [walls, setWalls] = useState<Wall[]>(() => {
-    try { const saved = localStorage.getItem('santaplan_walls'); return saved ? JSON.parse(saved) : []; } catch(e) { return []; }
+    try { 
+      const saved = localStorage.getItem('santaplan_walls'); 
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return parsed.map((w: any) => {
+        const wall = new Wall(w.startPoint, w.endPoint, w.thickness, w.level);
+        wall.id = w.id;
+        wall.elements = w.elements || [];
+        return wall;
+      });
+    } catch(e) { return []; }
   });
   const [furniture, setFurniture] = useState<FurnitureElement[]>(() => {
     try { const saved = localStorage.getItem('santaplan_furniture'); return saved ? JSON.parse(saved) : []; } catch(e) { return []; }
@@ -302,15 +315,24 @@ export const CadWorkspace: React.FC = () => {
       scale = 0.8;
     } else if (f.type === 'tv') {
       svgPath = "M 0 0 L 100 0 L 100 10 L 0 10 Z";
-      scale = 0.8; isSolid = true;
-    } else if (f.type === 'socket') {
-      svgPath = "M 10 0 C 20 0 20 20 10 20 C 0 20 0 0 10 0 Z M 5 10 L 7 10 M 13 10 L 15 10";
-      scale = 1.0;
+      scale = 0.8;
     } else if (f.type === 'lamp') {
-      svgPath = "M 10 0 C 20 0 20 20 10 20 C 0 20 0 0 10 0 Z M 0 10 L 20 10 M 10 0 L 10 20";
-      scale = 1.0;
+      svgPath = "M 20 0 C 40 0 40 40 20 40 C 0 40 0 0 20 0 Z M 20 10 L 20 30 M 10 20 L 30 20";
+      scale = 0.8;
     } else if (f.type === 'shower') {
-      svgPath = "M 0 0 L 80 0 L 80 80 L 0 80 Z M 0 0 L 80 80 M 80 0 L 0 80 M 35 35 C 45 35 45 45 35 45 C 25 45 25 35 35 35 Z";
+      svgPath = "M 0 0 L 80 0 L 80 80 L 0 80 Z M 0 0 L 80 80 M 80 0 L 0 80 M 35 35 L 45 35 L 45 45 L 35 45 Z";
+      scale = 0.8;
+    } else if (f.type === 'bathtub') {
+      svgPath = "M 0 0 L 160 0 L 160 70 L 0 70 Z M 10 10 C 10 0 150 0 150 10 L 150 60 C 150 70 10 70 10 60 Z M 20 35 C 25 35 25 45 20 45 C 15 45 15 35 20 35 Z";
+      scale = 0.8;
+    } else if (f.type === 'socket') {
+      svgPath = "M 0 0 L 20 0 L 20 20 L 0 20 Z M 10 20 L 10 40";
+      scale = 0.6;
+    } else if (f.type === 'tree') {
+      svgPath = "M 40 10 C 60 -10, 80 10, 70 30 C 90 40, 80 70, 60 70 C 50 90, 30 90, 20 70 C 0 70, -10 40, 10 30 C 0 10, 20 -10, 40 10 Z";
+      scale = 1.0;
+    } else if (f.type === 'kitchen') {
+      svgPath = "M 0 0 L 120 0 L 120 60 L 0 60 Z M 10 10 C 25 10 25 25 10 25 C -5 25 -5 10 10 10 Z M 35 10 C 50 10 50 25 35 25 C 20 25 20 10 35 10 Z M 10 35 C 25 35 25 50 10 50 C -5 50 -5 35 10 35 Z M 35 35 C 50 35 50 50 35 50 C 20 50 20 35 35 35 Z M 70 10 L 110 10 L 110 50 L 70 50 Z M 90 20 C 95 20 95 25 90 25 C 85 25 85 20 90 20 Z";
       scale = 0.8;
     }
 
@@ -616,7 +638,7 @@ export const CadWorkspace: React.FC = () => {
       canvas.on('mouse:up', () => { isCameraDragging = false; canvas.setViewportTransform(canvas.viewportTransform!); });
     }
 
-    const furnitureModes = ['toilet', 'sofa', 'bed', 'plant', 'stairs', 'column', 'table', 'chair', 'text', 'car', 'dining', 'tv', 'socket', 'lamp', 'shower'];
+    const furnitureModes = ['toilet', 'sofa', 'bed', 'plant', 'tree', 'stairs', 'column', 'table', 'chair', 'text', 'car', 'dining', 'kitchen', 'tv', 'socket', 'lamp', 'shower', 'bathtub'];
     if (furnitureModes.includes(activeMode)) {
       canvas.on('mouse:down', (options) => {
         const evt = options.e as MouseEvent;
@@ -1205,8 +1227,8 @@ export const CadWorkspace: React.FC = () => {
                   { name: 'Estructura y Textos', items: ['column', 'stairs', 'text'] },
                   { name: 'Puertas y Ventanas', items: ['door', 'window', 'garage'] },
                   { name: 'Muebles de Habitación', items: ['bed', 'sofa', 'tv', 'lamp', 'socket'] },
-                  { name: 'Cocina y Comedor', items: ['dining', 'table', 'chair'] },
-                  { name: 'Baño y Exteriores', items: ['toilet', 'shower', 'plant', 'car'] }
+                  { name: 'Cocina y Comedor', items: ['dining', 'table', 'chair', 'kitchen'] },
+                  { name: 'Baño y Exteriores', items: ['toilet', 'shower', 'bathtub', 'plant', 'tree', 'car'] }
                 ].map((cat, i) => (
                   <div key={i} className="border-t border-gray-100">
                     <div className="bg-gray-50 px-4 py-2 text-xs font-semibold text-gray-700 flex justify-between items-center cursor-pointer hover:bg-gray-100">
@@ -1247,7 +1269,7 @@ export const CadWorkspace: React.FC = () => {
                   <input 
                     type="number" 
                     step="0.01"
-                    value={((selectedWall.lengthPx || 0) / PIXELS_PER_METER).toFixed(2)} 
+                    value={(Math.sqrt(Math.pow(selectedWall.endPoint.x - selectedWall.startPoint.x, 2) + Math.pow(selectedWall.endPoint.y - selectedWall.startPoint.y, 2)) / PIXELS_PER_METER).toFixed(2)} 
                     onChange={e => updateWallLength(Number(e.target.value))} 
                     className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-yellow-400" 
                   />

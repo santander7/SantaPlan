@@ -1,7 +1,7 @@
 import React from 'react';
 import { MousePointer2, Pencil, Trash2, Box, PenTool, Layers, Square, Download } from 'lucide-react';
 
-export type ToolMode = 'select' | 'draw' | 'door' | 'window' | 'garage' | 'toilet' | 'sofa' | 'bed' | 'plant' | 'stairs' | 'column' | 'table' | 'chair' | 'text' | 'car' | 'dining' | 'tv' | 'socket' | 'lamp' | 'shower';
+export type ToolMode = 'select' | 'draw' | 'door' | 'window' | 'garage' | 'toilet' | 'sofa' | 'bed' | 'plant' | 'tree' | 'stairs' | 'column' | 'table' | 'chair' | 'text' | 'car' | 'dining' | 'kitchen' | 'tv' | 'socket' | 'lamp' | 'shower' | 'bathtub';
 export type ViewMode = '2D' | '3D';
 
 interface ToolbarProps {

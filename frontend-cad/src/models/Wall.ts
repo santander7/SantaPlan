@@ -4,7 +4,7 @@ export interface Point {
 }
 
 export type ElementType = 'door' | 'window' | 'garage';
-export type FurnitureType = 'toilet' | 'sofa' | 'bed' | 'plant' | 'stairs' | 'column' | 'table' | 'chair' | 'text' | 'car' | 'dining' | 'tv' | 'socket' | 'lamp' | 'shower';
+export type FurnitureType = 'bed' | 'sofa' | 'toilet' | 'plant' | 'tree' | 'table' | 'chair' | 'stairs' | 'column' | 'car' | 'dining' | 'kitchen' | 'tv' | 'lamp' | 'shower' | 'bathtub' | 'socket' | 'text';
 
 export interface WallElement {
   id: string;
