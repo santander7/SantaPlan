@@ -114,12 +114,12 @@ export const CadWorkspace: React.FC = () => {
     }
   };
 
-  const createWallGraphic = (x1: number, y1: number, x2: number, y2: number, id?: string) => {
+  const createWallGraphic = (x1: number, y1: number, x2: number, y2: number, thickness: number, id?: string) => {
     const dx = x2 - x1; const dy = y2 - y1;
     const length = Math.sqrt(dx * dx + dy * dy);
     const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
     
-    const rect = new fabric.Rect({ width: length, height: 4, fill: '#1a1a1a', originX: 'center', originY: 'center' });
+    const rect = new fabric.Rect({ width: length, height: thickness || 4, fill: '#1a1a1a', originX: 'center', originY: 'center' });
     const group = new fabric.Group([rect], {
       left: x1 + dx / 2, top: y1 + dy / 2, angle: angle, originX: 'center', originY: 'center',
       selectable: activeMode === 'select', name: 'wall', data: { id }
