@@ -121,6 +121,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeMode, viewMode, currentL
                 <span className="text-[10px] font-medium tracking-wide">PDF</span>
               </button>
             )}
+            <button
+              onClick={() => document.dispatchEvent(new CustomEvent('openAiRender'))}
+              className="flex flex-col items-center justify-center p-1.5 px-3 rounded hover:bg-blue-50 text-blue-600 font-bold"
+            >
+              <PenTool size={20} className="mb-1" />
+              <span className="text-[10px] font-bold tracking-wide">Render IA</span>
+            </button>
             <button 
               onClick={onClearAll}
               className="flex flex-col items-center justify-center p-1.5 px-3 rounded hover:bg-red-50 text-red-600 ml-2"

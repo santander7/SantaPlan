@@ -7,6 +7,7 @@ import { Wall } from '../models/Wall';
 import type { WallElement, ElementType, FurnitureElement, FurnitureType } from '../models/Wall';
 import { Toolbar } from './Toolbar';
 import type { ToolMode, ViewMode } from './Toolbar';
+import { AiRenderModal } from './AiRenderModal';
 import { DoorClosed, LayoutGrid, Toilet, Sofa, Bed, TreeDeciduous, ArrowUpToLine, Search, Table2, Armchair, Type, Car, Utensils, Monitor, Plug, Lightbulb, Bath, Warehouse } from 'lucide-react';
 
 const GRID_SIZE = 50; 
@@ -56,6 +57,7 @@ export const CadWorkspace: React.FC = () => {
   const [selectedObjectType, setSelectedObjectType] = useState<'wall' | 'element' | 'furniture' | null>(null);
   
   const [searchTerm, setSearchTerm] = useState('');
+  const [capturedPlanImage, setCapturedPlanImage] = useState<string | undefined>();
 
   const isDrawingRef = useRef(false);
   const currentLineRef = useRef<fabric.Group | null>(null);
@@ -102,6 +104,20 @@ export const CadWorkspace: React.FC = () => {
       canvas.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom);
       opt.e.preventDefault(); opt.e.stopPropagation();
     });
+
+    const handleAiRender = () => {
+      if (fabricCanvas.current) {
+        // Reset zoom and pan to capture the whole plan if needed, or just capture current view.
+        // For simplicity, capture current canvas view.
+        const dataUrl = fabricCanvas.current.toDataURL({ format: 'png', quality: 1, multiplier: 2 });
+        setCapturedPlanImage(dataUrl);
+      }
+    };
+    document.addEventListener('openAiRender', handleAiRender);
+    
+    return () => {
+      document.removeEventListener('openAiRender', handleAiRender);
+    };
   }, [activeMode]);
 
   const drawGrid = (canvas: fabric.Canvas) => {
@@ -590,11 +606,17 @@ export const CadWorkspace: React.FC = () => {
       camera.upperRadiusLimit = 100;
       camera.panningSensibility = 500;
 
-      // Entorno Diorama
+      // Entorno Diorama & HDRI (Image-Based Lighting)
       scene.clearColor = new BABYLON.Color4(0.89, 0.85, 0.78, 1); // Beige arquitectónico
       
+      // HDRI Environment for realistic PBR reflections
+      const envTexture = BABYLON.CubeTexture.CreateFromPrefilteredData("https://playground.babylonjs.com/textures/environment.dds", scene);
+      scene.environmentTexture = envTexture;
+      // create default skybox
+      scene.createDefaultSkybox(envTexture, true, (camera.maxZ - camera.minZ) / 2, 0.3);
+      
       const hemiLight = new BABYLON.HemisphericLight("hemiLight", new BABYLON.Vector3(0, 1, 0), scene);
-      hemiLight.intensity = 0.5;
+      hemiLight.intensity = 0.3; // Reduce hemi light since HDRI provides ambient
       hemiLight.groundColor = new BABYLON.Color3(0.2, 0.2, 0.2);
 
       const dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(-0.5, -1, -0.5), scene);
@@ -1121,6 +1143,7 @@ export const CadWorkspace: React.FC = () => {
           </div>
         </div>
       </div>
+      <AiRenderModal canvasDataUrl={capturedPlanImage} />
     </div>
   );
 };
