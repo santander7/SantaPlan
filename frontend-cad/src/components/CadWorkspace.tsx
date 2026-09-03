@@ -58,6 +58,7 @@ export const CadWorkspace: React.FC = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [capturedPlanImage, setCapturedPlanImage] = useState<string | undefined>();
+  const [isFirstPerson, setIsFirstPerson] = useState(false);
 
   const isDrawingRef = useRef(false);
   const currentLineRef = useRef<fabric.Group | null>(null);
@@ -606,6 +607,20 @@ export const CadWorkspace: React.FC = () => {
       camera.upperRadiusLimit = 100;
       camera.panningSensibility = 500;
 
+      // VR / First Person Camera
+      const fpCamera = new BABYLON.UniversalCamera("fpCamera", new BABYLON.Vector3(0, 1.6, 0), scene);
+      fpCamera.speed = 0.15;
+      fpCamera.angularSensibility = 3000;
+      fpCamera.applyGravity = true;
+      fpCamera.checkCollisions = true;
+      fpCamera.ellipsoid = new BABYLON.Vector3(0.4, 0.8, 0.4); // Collider (ancho, alto de jugador)
+      
+      // Control de teclado para caminar (W, A, S, D)
+      fpCamera.keysUp = [87]; // W
+      fpCamera.keysDown = [83]; // S
+      fpCamera.keysLeft = [65]; // A
+      fpCamera.keysRight = [68]; // D
+
       // ==========================================
       // ILUMINACIÓN PROFESIONAL Y HDRI
       // ==========================================
@@ -668,8 +683,14 @@ export const CadWorkspace: React.FC = () => {
       manager.positionGizmoEnabled = true;
       manager.rotationGizmoEnabled = true;
       manager.boundingBoxGizmoEnabled = false;
-      manager.attachableMeshes = []; 
+      manager.usePointerToAttach = true; // Permite hacer clic para editar
+      manager.clearGizmoOnEmptyPointerEvent = true;
       gizmoManager.current = manager;
+
+      // Habilitar gravedad y colisiones para realidad virtual / primera persona
+      scene.gravity = new BABYLON.Vector3(0, -0.9, 0);
+      scene.collisionsEnabled = true;
+      camera.checkCollisions = true;
 
       engine.runRenderLoop(() => { scene.render(); });
       window.addEventListener('resize', () => engine?.resize());
@@ -681,6 +702,24 @@ export const CadWorkspace: React.FC = () => {
     
     wallMeshes.current.forEach(mesh => mesh.dispose()); wallMeshes.current = [];
     glbMeshes.current.forEach(mesh => mesh.dispose()); glbMeshes.current = [];
+    if (gizmoManager.current) gizmoManager.current.attachableMeshes = [];
+
+    // Cambiar cámara si estamos en primera persona
+    const fpCam = scene.getCameraByName("fpCamera") as BABYLON.UniversalCamera;
+    const arcCam = scene.getCameraByName("camera") as BABYLON.ArcRotateCamera;
+    if (fpCam && arcCam && engine3dRef.current) {
+        if (isFirstPerson) {
+            scene.activeCamera = fpCam;
+            arcCam.detachControl();
+            fpCam.attachControl(engine3dRef.current, true);
+            // Iniciar en el centro del plano
+            fpCam.position = new BABYLON.Vector3(arcCam.target.x, 1.6, arcCam.target.z);
+        } else {
+            scene.activeCamera = arcCam;
+            fpCam.detachControl();
+            arcCam.attachControl(engine3dRef.current, true);
+        }
+    }
 
     // MATERIALES PBR FOTOREALISTAS
     const wallMaterial = new BABYLON.PBRMaterial("wallMat", scene);
@@ -732,25 +771,12 @@ export const CadWorkspace: React.FC = () => {
     const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: bbWidthM, height: bbHeightM }, scene);
     ground.position.x = cxMeters; ground.position.z = czMeters;
     ground.receiveShadows = true; 
+    ground.checkCollisions = true; // Para la cámara en 1ra persona
     
     const groundMat = new BABYLON.PBRMaterial("groundMat", scene);
-    const woodTex = new BABYLON.Texture("https://playground.babylonjs.com/textures/albedo.png", scene); // Textura de madera de alta calidad
-    woodTex.uScale = 5; woodTex.vScale = 5;
-    groundMat.albedoTexture = woodTex;
-    
-    const woodBump = new BABYLON.Texture("https://playground.babylonjs.com/textures/normal.png", scene);
-    woodBump.uScale = 5; woodBump.vScale = 5;
-    groundMat.bumpTexture = woodBump;
-
-    const woodRef = new BABYLON.Texture("https://playground.babylonjs.com/textures/reflectivity.png", scene);
-    woodRef.uScale = 5; woodRef.vScale = 5;
-    groundMat.reflectivityTexture = woodRef;
-    
-    groundMat.roughness = 0.3; // Más opaco, menos "espejo"
-    groundMat.metallic = 0.0;
-    groundMat.useRoughnessFromMetallicTextureAlpha = false;
-    groundMat.useRoughnessFromMetallicTextureGreen = true;
-    groundMat.useMetallnessFromMetallicTextureBlue = true;
+    groundMat.albedoColor = new BABYLON.Color3(0.85, 0.85, 0.86); // Gris claro arquitectónico
+    groundMat.roughness = 0.3; // Ligeramente pulido para reflejar la luz del sol
+    groundMat.metallic = 0.05;
     
     ground.material = groundMat;
     wallMeshes.current.push(ground);
@@ -830,6 +856,7 @@ export const CadWorkspace: React.FC = () => {
       wallMesh.position.y = (FLOOR_HEIGHT_M / 2) + levelBaseY;
       wallMesh.rotation.y = -angle; 
       wallMesh.receiveShadows = true;
+      wallMesh.checkCollisions = true; // Para VR/Primera Persona
       shadowGen.addShadowCaster(wallMesh);
       wallMeshes.current.push(wallMesh);
       
@@ -952,7 +979,7 @@ export const CadWorkspace: React.FC = () => {
       glbMeshes.current.push(root);
       if (gizmoManager.current && f.type !== 'column') gizmoManager.current.attachableMeshes!.push(root as any);
     });
-  }, [viewMode, walls, furniture]);
+  }, [viewMode, walls, furniture, isFirstPerson]);
 
   const updateElementProp = (type: 'width' | 'height' | 'elevation' | 'label', val: any) => {
     if(!selectedObjectId) return;
@@ -1167,9 +1194,18 @@ export const CadWorkspace: React.FC = () => {
           </div>
           <div className="absolute inset-0 transition-opacity duration-300 bg-[#e5e5e5]" style={{ opacity: viewMode === '3D' ? 1 : 0, pointerEvents: viewMode === '3D' ? 'auto' : 'none', zIndex: viewMode === '3D' ? 10 : 1 }}>
             <canvas ref={engine3dRef} className="block w-full h-full outline-none touch-none" />
+            <div className="absolute top-4 right-4 flex flex-col gap-2 pointer-events-auto">
+              <button 
+                onClick={() => setIsFirstPerson(!isFirstPerson)}
+                className={`px-4 py-2 rounded shadow-lg font-bold text-sm transition-colors ${isFirstPerson ? 'bg-blue-600 text-white' : 'bg-white text-gray-800'}`}
+              >
+                {isFirstPerson ? 'Salir de Primera Persona' : 'Entrar (1ra Persona / VR)'}
+              </button>
+            </div>
             <div className="absolute bottom-4 right-4 bg-black/60 text-white text-xs px-3 py-2 rounded pointer-events-none backdrop-blur-sm border border-white/10 shadow-lg">
               <span className="font-bold block mb-1">Controles 3D:</span>
-              Haz clic izquierdo sobre los muebles para revelar los controles de escala, rotación y posición.
+              Haz clic sobre los muebles para revelar controles de escala y rotación.<br/>
+              {isFirstPerson && <span className="text-yellow-300">Usa W, A, S, D para caminar y el ratón para mirar.</span>}
             </div>
           </div>
         </div>
