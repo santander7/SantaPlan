@@ -80,7 +80,8 @@ export const CadWorkspace: React.FC = () => {
   
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedObjectType, setSelectedObjectType] = useState<'wall' | 'element' | 'furniture' | null>(null);
-  
+  const [editLengthStr, setEditLengthStr] = useState<string>("");
+
   const [searchTerm, setSearchTerm] = useState('');
   const [capturedPlanImage, setCapturedPlanImage] = useState<string | undefined>();
   const [isFirstPerson, setIsFirstPerson] = useState(false);
@@ -185,15 +186,18 @@ export const CadWorkspace: React.FC = () => {
 
   // Architectural Auto-Dimensioning
   const drawDimensionLine = (canvas: fabric.Canvas, wall: Wall) => {
-    const dx = wall.endPoint.x - wall.startPoint.x; 
+    if (!wall || !wall.startPoint || !wall.endPoint) return;
+    const dx = wall.endPoint.x - wall.startPoint.x;
     const dy = wall.endPoint.y - wall.startPoint.y;
     const length = Math.sqrt(dx*dx + dy*dy);
-    if (length < 10) return;
-
+    if (length < 10 || isNaN(length)) return;
     const angle = Math.atan2(dy, dx);
-    const offsetDistance = 35; // Distancia de la cota al muro
+
+    
+    // Normal al segmento
     const nx = -Math.sin(angle); const ny = Math.cos(angle);
     
+    const offsetDistance = 35;
     const ox1 = wall.startPoint.x + nx * offsetDistance;
     const oy1 = wall.startPoint.y + ny * offsetDistance;
     const ox2 = wall.endPoint.x + nx * offsetDistance;
@@ -207,7 +211,7 @@ export const CadWorkspace: React.FC = () => {
     objs.push(new fabric.Line([wall.endPoint.x, wall.endPoint.y, ox2 + nx*5, oy2 + ny*5], { stroke: dimColor, strokeWidth: 0.5, selectable: false }));
 
     // Subdivisiones si hay elementos (puertas/ventanas/garajes)
-    if (wall.elements.length > 0) {
+    if (wall.elements && wall.elements.length > 0) {
         const sortedEls = [...wall.elements].sort((a,b) => a.positionRatio - b.positionRatio);
         let currentRatio = 0;
         let lastPt = { x: ox1, y: oy1 };
@@ -1147,6 +1151,13 @@ export const CadWorkspace: React.FC = () => {
   const selectedWall = walls.find(w => w.id === selectedObjectId);
   const selectedFurn = furniture.find(f => f.id === selectedObjectId);
 
+  useEffect(() => {
+    if (selectedObjectType === 'wall' && selectedWall) {
+      const lenM = Math.sqrt(Math.pow(selectedWall.endPoint.x - selectedWall.startPoint.x, 2) + Math.pow(selectedWall.endPoint.y - selectedWall.startPoint.y, 2)) / PIXELS_PER_METER;
+      setEditLengthStr(lenM.toFixed(2));
+    }
+  }, [selectedObjectId, selectedWall, selectedObjectType]);
+
   const filteredSymbols = SYMBOLS.filter(s => s.label.toLowerCase().includes(searchTerm.toLowerCase()));
 
   const downloadPDF = () => {
@@ -1267,10 +1278,19 @@ export const CadWorkspace: React.FC = () => {
                 <label className="flex flex-col text-xs font-semibold gap-1 text-gray-600 mb-2">
                   Longitud Exacta (m)
                   <input 
-                    type="number" 
-                    step="0.01"
-                    value={(Math.sqrt(Math.pow(selectedWall.endPoint.x - selectedWall.startPoint.x, 2) + Math.pow(selectedWall.endPoint.y - selectedWall.startPoint.y, 2)) / PIXELS_PER_METER).toFixed(2)} 
-                    onChange={e => updateWallLength(Number(e.target.value))} 
+                    type="text" 
+                    value={editLengthStr} 
+                    onChange={e => setEditLengthStr(e.target.value)} 
+                    onBlur={() => {
+                        const val = parseFloat(editLengthStr.replace(',', '.'));
+                        if (!isNaN(val) && val > 0.1) updateWallLength(val);
+                        else setEditLengthStr((Math.sqrt(Math.pow(selectedWall.endPoint.x - selectedWall.startPoint.x, 2) + Math.pow(selectedWall.endPoint.y - selectedWall.startPoint.y, 2)) / PIXELS_PER_METER).toFixed(2));
+                    }}
+                    onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                            e.currentTarget.blur();
+                        }
+                    }}
                     className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-yellow-400" 
                   />
                 </label>
