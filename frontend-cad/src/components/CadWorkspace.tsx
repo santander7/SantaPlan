@@ -50,8 +50,20 @@ export const CadWorkspace: React.FC = () => {
   const [activeMode, setActiveMode] = useState<ToolMode>('select');
   const [viewMode, setViewMode] = useState<ViewMode>('2D');
   const [currentLevel, setCurrentLevel] = useState<number>(1);
-  const [walls, setWalls] = useState<Wall[]>([]);
-  const [furniture, setFurniture] = useState<FurnitureElement[]>([]);
+  const [walls, setWalls] = useState<Wall[]>(() => {
+    try { const saved = localStorage.getItem('santaplan_walls'); return saved ? JSON.parse(saved) : []; } catch(e) { return []; }
+  });
+  const [furniture, setFurniture] = useState<FurnitureElement[]>(() => {
+    try { const saved = localStorage.getItem('santaplan_furniture'); return saved ? JSON.parse(saved) : []; } catch(e) { return []; }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('santaplan_walls', JSON.stringify(walls));
+  }, [walls]);
+
+  useEffect(() => {
+    localStorage.setItem('santaplan_furniture', JSON.stringify(furniture));
+  }, [furniture]);
   
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedObjectType, setSelectedObjectType] = useState<'wall' | 'element' | 'furniture' | null>(null);
