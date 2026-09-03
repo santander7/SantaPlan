@@ -8,7 +8,7 @@ import type { WallElement, ElementType, FurnitureElement, FurnitureType } from '
 import { Toolbar } from './Toolbar';
 import type { ToolMode, ViewMode } from './Toolbar';
 import { AiRenderModal } from './AiRenderModal';
-import { DoorClosed, LayoutGrid, Toilet, Sofa, Bed, TreeDeciduous, ArrowUpToLine, Search, Table2, Armchair, Type, Car, Utensils, Monitor, Plug, Lightbulb, Bath, Warehouse } from 'lucide-react';
+import { DoorClosed, LayoutGrid, Toilet, Sofa, Bed, TreeDeciduous, ArrowUpToLine, Search, Table2, Armchair, Type, Car, Utensils, Monitor, Plug, Lightbulb, Bath, Warehouse, Layers } from 'lucide-react';
 
 const GRID_SIZE = 50; 
 const PIXELS_PER_METER = 50;
@@ -161,7 +161,8 @@ export const CadWorkspace: React.FC = () => {
     const length = Math.sqrt(dx * dx + dy * dy);
     const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
     
-    const rect = new fabric.Rect({ width: length, height: thickness || 4, fill: '#1a1a1a', originX: 'center', originY: 'center' });
+    // Muros estilo SmartDraw (Borde negro, relleno blanco)
+    const rect = new fabric.Rect({ width: length, height: thickness || 8, fill: 'white', stroke: 'black', strokeWidth: 2, originX: 'center', originY: 'center' });
     const group = new fabric.Group([rect], {
       left: x1 + dx / 2, top: y1 + dy / 2, angle: angle, originX: 'center', originY: 'center',
       selectable: activeMode === 'select', name: 'wall', data: { id }
@@ -1330,47 +1331,68 @@ export const CadWorkspace: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex-1 relative bg-[#e5e5e5] overflow-hidden">
-          {viewMode === '2D' && (
-            <>
-              {/* Ruler Top */}
-              <div className="absolute top-0 left-6 right-0 h-6 bg-white border-b border-gray-300 z-10 flex overflow-hidden">
-                {Array.from({length: 40}).map((_, i) => (
-                  <div key={i} className="flex-none w-[50px] border-l border-gray-400 h-full text-[9px] text-gray-500 pl-1 pt-0.5">
-                    {i * 1}
-                  </div>
-                ))}
-              </div>
-              {/* Ruler Left */}
-              <div className="absolute top-6 left-0 bottom-0 w-6 bg-white border-r border-gray-300 z-10 flex flex-col overflow-hidden">
-                {Array.from({length: 40}).map((_, i) => (
-                  <div key={i} className="flex-none h-[50px] border-t border-gray-400 w-full text-[9px] text-gray-500 text-center pt-1">
-                    {i * 1}
-                  </div>
-                ))}
-              </div>
-              <div className="absolute top-0 left-0 w-6 h-6 bg-gray-100 border-r border-b border-gray-300 z-20"></div>
-            </>
-          )}
+        <div className="flex-1 relative bg-[#e5e5e5] overflow-hidden flex flex-col">
+          <div className="flex-1 relative">
+            {viewMode === '2D' && (
+              <>
+                {/* Ruler Top */}
+                <div className="absolute top-0 left-6 right-0 h-6 bg-white border-b border-gray-300 z-10 flex overflow-hidden">
+                  {Array.from({length: 40}).map((_, i) => (
+                    <div key={i} className="flex-none w-[50px] border-l border-gray-400 h-full text-[9px] text-gray-500 pl-1 pt-0.5">
+                      {i * 1}
+                    </div>
+                  ))}
+                </div>
+                {/* Ruler Left */}
+                <div className="absolute top-6 left-0 bottom-0 w-6 bg-white border-r border-gray-300 z-10 flex flex-col overflow-hidden">
+                  {Array.from({length: 40}).map((_, i) => (
+                    <div key={i} className="flex-none h-[50px] border-t border-gray-400 w-full text-[9px] text-gray-500 text-center pt-1">
+                      {i * 1}
+                    </div>
+                  ))}
+                </div>
+                <div className="absolute top-0 left-0 w-6 h-6 bg-gray-100 border-r border-b border-gray-300 z-20"></div>
+              </>
+            )}
 
-          <div className="absolute inset-0 transition-opacity duration-300" style={{ opacity: viewMode === '2D' ? 1 : 0, pointerEvents: viewMode === '2D' ? 'auto' : 'none', zIndex: viewMode === '2D' ? 5 : 1 }}>
-            <canvas ref={canvasRef} className="block w-full h-full cursor-crosshair" />
+            <div className="absolute inset-0 transition-opacity duration-300" style={{ opacity: viewMode === '2D' ? 1 : 0, pointerEvents: viewMode === '2D' ? 'auto' : 'none', zIndex: viewMode === '2D' ? 5 : 1 }}>
+              <canvas ref={canvasRef} className="block w-full h-full cursor-crosshair" />
+            </div>
+            <div className="absolute inset-0 transition-opacity duration-300 bg-[#e5e5e5]" style={{ opacity: viewMode === '3D' ? 1 : 0, pointerEvents: viewMode === '3D' ? 'auto' : 'none', zIndex: viewMode === '3D' ? 10 : 1 }}>
+              <canvas ref={engine3dRef} className="block w-full h-full outline-none touch-none" />
+              <div className="absolute top-4 right-4 flex flex-col gap-2 pointer-events-auto">
+                <button 
+                  onClick={() => setIsFirstPerson(!isFirstPerson)}
+                  className={`px-4 py-2 rounded shadow-lg font-bold text-sm transition-colors ${isFirstPerson ? 'bg-blue-600 text-white' : 'bg-white text-gray-800'}`}
+                >
+                  {isFirstPerson ? 'Salir de Primera Persona' : 'Entrar (1ra Persona / VR)'}
+                </button>
+              </div>
+              <div className="absolute bottom-4 right-4 bg-black/60 text-white text-xs px-3 py-2 rounded pointer-events-none backdrop-blur-sm border border-white/10 shadow-lg">
+                <span className="font-bold block mb-1">Controles 3D:</span>
+                Haz clic sobre los muebles para revelar controles de escala y rotación.<br/>
+                {isFirstPerson && <span className="text-yellow-300">Usa W, A, S, D para caminar y el ratón para mirar.</span>}
+              </div>
+            </div>
           </div>
-          <div className="absolute inset-0 transition-opacity duration-300 bg-[#e5e5e5]" style={{ opacity: viewMode === '3D' ? 1 : 0, pointerEvents: viewMode === '3D' ? 'auto' : 'none', zIndex: viewMode === '3D' ? 10 : 1 }}>
-            <canvas ref={engine3dRef} className="block w-full h-full outline-none touch-none" />
-            <div className="absolute top-4 right-4 flex flex-col gap-2 pointer-events-auto">
-              <button 
-                onClick={() => setIsFirstPerson(!isFirstPerson)}
-                className={`px-4 py-2 rounded shadow-lg font-bold text-sm transition-colors ${isFirstPerson ? 'bg-blue-600 text-white' : 'bg-white text-gray-800'}`}
-              >
-                {isFirstPerson ? 'Salir de Primera Persona' : 'Entrar (1ra Persona / VR)'}
-              </button>
-            </div>
-            <div className="absolute bottom-4 right-4 bg-black/60 text-white text-xs px-3 py-2 rounded pointer-events-none backdrop-blur-sm border border-white/10 shadow-lg">
-              <span className="font-bold block mb-1">Controles 3D:</span>
-              Haz clic sobre los muebles para revelar controles de escala y rotación.<br/>
-              {isFirstPerson && <span className="text-yellow-300">Usa W, A, S, D para caminar y el ratón para mirar.</span>}
-            </div>
+          
+          {/* SmartDraw Style Footer */}
+          <div className="h-8 bg-white border-t border-gray-300 flex items-center px-4 text-[10px] text-gray-600 font-semibold gap-6 z-20 shadow-sm">
+             <span className="flex items-center gap-1 cursor-pointer hover:text-gray-900"><Layers size={12} /> Capa 1</span>
+             {selectedObjectId ? (
+                <>
+                   <span>Izquierda: <span className="font-normal">2.40</span></span>
+                   <span>Arriba: <span className="font-normal">5.12</span></span>
+                   <span>Ancho: <span className="font-normal">0.66</span></span>
+                   <span>Alto: <span className="font-normal">0.41</span></span>
+                </>
+             ) : (
+                <span className="font-normal italic text-gray-400">Ningún elemento seleccionado</span>
+             )}
+             <span className="ml-auto flex items-center gap-2">
+                <span className="w-24 h-1 bg-gray-200 rounded-full overflow-hidden flex items-center"><div className="w-1/2 h-full bg-blue-500"></div></span>
+                100%
+             </span>
           </div>
         </div>
       </div>

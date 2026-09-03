@@ -28,7 +28,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeMode, viewMode, currentL
       </div>
 
       {/* Ribbon Bar */}
-      <div className="flex items-center p-2 gap-6 bg-[#f8f9fa]">
+      <div className="flex items-center p-2 gap-4 bg-[#f8f9fa] overflow-x-auto">
+        
+        {/* Archivo / Portapapeles (SmartDraw fake) */}
+        <div className="flex flex-col items-center border-r border-gray-300 pr-4 pl-2">
+           <div className="flex gap-2">
+             <button className="flex flex-col items-center justify-center p-2 rounded w-14 h-16 hover:bg-gray-200 border border-transparent text-gray-700">
+                <Download size={20} />
+                <span className="text-[9px] mt-1 font-medium">Exportar</span>
+             </button>
+           </div>
+           <span className="text-[9px] text-gray-400 mt-2 uppercase tracking-wider font-semibold">Archivo</span>
+        </div>
         
         {/* Toggle View Group */}
         <div className="flex flex-col items-center border-r border-gray-300 pr-6 pl-2">
