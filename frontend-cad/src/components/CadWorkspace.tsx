@@ -1182,35 +1182,51 @@ export const CadWorkspace: React.FC = () => {
       <div className="flex-1 relative flex">
         <div className="w-64 bg-white border-r border-gray-300 shadow-sm z-20 flex flex-col font-sans overflow-hidden">
           
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="text-sm font-bold text-gray-800 mb-2">Symbols</h2>
+          <div className="flex flex-col border-b border-gray-200">
+            <h2 className="text-sm font-bold text-gray-800 p-4 pb-2">Bibliotecas de Símbolos</h2>
             {viewMode === '2D' ? (
-              <div className="flex flex-col gap-3">
-                <div className="relative">
-                  <Search size={14} className="absolute left-2 top-2.5 text-gray-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Search for symbols..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:border-yellow-400"
-                  />
+              <div className="flex flex-col h-64 overflow-y-auto">
+                <div className="px-4 pb-2">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-2 top-2.5 text-gray-400" />
+                    <input 
+                      type="text" 
+                      placeholder="Buscar símbolos..." 
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                  {filteredSymbols.map(sym => (
-                    <button 
-                      key={sym.id}
-                      onClick={() => setActiveMode(sym.id as ToolMode)} 
-                      className={`flex flex-col items-center justify-center p-2 border rounded hover:bg-yellow-50 ${sym.span ? 'col-span-2' : ''} ${activeMode === sym.id ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200'}`}
-                    >
-                      {sym.icon} <span className="text-[10px]">{sym.label}</span>
-                    </button>
-                  ))}
-                  {filteredSymbols.length === 0 && <p className="text-xs text-gray-400 col-span-2 text-center py-2">No symbols found</p>}
-                </div>
+                
+                {/* Categorías estilo SmartDraw */}
+                {[
+                  { name: 'Estructura y Textos', items: ['column', 'stairs', 'text'] },
+                  { name: 'Puertas y Ventanas', items: ['door', 'window', 'garage'] },
+                  { name: 'Muebles de Habitación', items: ['bed', 'sofa', 'tv', 'lamp', 'socket'] },
+                  { name: 'Cocina y Comedor', items: ['dining', 'table', 'chair'] },
+                  { name: 'Baño y Exteriores', items: ['toilet', 'shower', 'plant', 'car'] }
+                ].map((cat, i) => (
+                  <div key={i} className="border-t border-gray-100">
+                    <div className="bg-gray-50 px-4 py-2 text-xs font-semibold text-gray-700 flex justify-between items-center cursor-pointer hover:bg-gray-100">
+                      <span>📁 {cat.name}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 p-2 bg-white">
+                      {filteredSymbols.filter(s => cat.items.includes(s.id)).map(sym => (
+                        <button 
+                          key={sym.id}
+                          onClick={() => setActiveMode(sym.id as ToolMode)} 
+                          className={`flex flex-col items-center justify-center p-2 border rounded hover:bg-blue-50 transition-colors ${activeMode === sym.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}`}
+                        >
+                          {sym.icon} <span className="text-[9px] mt-1 text-center leading-tight">{sym.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
-              <p className="text-xs text-gray-500">Los símbolos se agregan desde la Planta 2D.</p>
+              <p className="text-xs text-gray-500 p-4">Los símbolos se agregan desde la Planta 2D.</p>
             )}
           </div>
 
@@ -1314,8 +1330,30 @@ export const CadWorkspace: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex-1 relative bg-[#e5e5e5]">
-          <div className="absolute inset-0 transition-opacity duration-300" style={{ opacity: viewMode === '2D' ? 1 : 0, pointerEvents: viewMode === '2D' ? 'auto' : 'none', zIndex: viewMode === '2D' ? 10 : 1 }}>
+        <div className="flex-1 relative bg-[#e5e5e5] overflow-hidden">
+          {viewMode === '2D' && (
+            <>
+              {/* Ruler Top */}
+              <div className="absolute top-0 left-6 right-0 h-6 bg-white border-b border-gray-300 z-10 flex overflow-hidden">
+                {Array.from({length: 40}).map((_, i) => (
+                  <div key={i} className="flex-none w-[50px] border-l border-gray-400 h-full text-[9px] text-gray-500 pl-1 pt-0.5">
+                    {i * 1}
+                  </div>
+                ))}
+              </div>
+              {/* Ruler Left */}
+              <div className="absolute top-6 left-0 bottom-0 w-6 bg-white border-r border-gray-300 z-10 flex flex-col overflow-hidden">
+                {Array.from({length: 40}).map((_, i) => (
+                  <div key={i} className="flex-none h-[50px] border-t border-gray-400 w-full text-[9px] text-gray-500 text-center pt-1">
+                    {i * 1}
+                  </div>
+                ))}
+              </div>
+              <div className="absolute top-0 left-0 w-6 h-6 bg-gray-100 border-r border-b border-gray-300 z-20"></div>
+            </>
+          )}
+
+          <div className="absolute inset-0 transition-opacity duration-300" style={{ opacity: viewMode === '2D' ? 1 : 0, pointerEvents: viewMode === '2D' ? 'auto' : 'none', zIndex: viewMode === '2D' ? 5 : 1 }}>
             <canvas ref={canvasRef} className="block w-full h-full cursor-crosshair" />
           </div>
           <div className="absolute inset-0 transition-opacity duration-300 bg-[#e5e5e5]" style={{ opacity: viewMode === '3D' ? 1 : 0, pointerEvents: viewMode === '3D' ? 'auto' : 'none', zIndex: viewMode === '3D' ? 10 : 1 }}>

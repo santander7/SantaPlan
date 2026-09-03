@@ -21,7 +21,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeMode, viewMode, currentL
       {/* SmartDraw Style Tabs */}
       <div className="flex bg-[#ffffff] px-4 pt-2 border-b border-gray-300 gap-6">
         <span className="font-bold text-blue-600 text-lg mr-4 flex items-center">SantaPlan</span>
-        <button className="px-2 py-1 text-sm font-semibold text-gray-800 border-b-2 border-yellow-500">Home</button>
+        <button className="px-2 py-1 text-sm font-semibold text-gray-800 border-b-2 border-blue-500">Home</button>
         <button className="px-2 py-1 text-sm text-gray-600 hover:text-gray-800 transition-colors">Design</button>
         <button className="px-2 py-1 text-sm text-gray-600 hover:text-gray-800 transition-colors">Page</button>
         <button className="px-2 py-1 text-sm text-gray-600 hover:text-gray-800 transition-colors">View</button>
@@ -36,7 +36,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeMode, viewMode, currentL
             <button
               onClick={() => onViewChange('2D')}
               className={`flex flex-col items-center justify-center p-2 rounded w-16 h-16 transition-colors ${
-                viewMode === '2D' ? 'bg-yellow-100 border border-yellow-300 text-yellow-800' : 'hover:bg-gray-200 border border-transparent text-gray-700'
+                viewMode === '2D' ? 'bg-blue-100 border border-blue-300 text-blue-800' : 'hover:bg-gray-200 border border-transparent text-gray-700'
               }`}
             >
               <PenTool size={24} />
@@ -45,7 +45,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeMode, viewMode, currentL
             <button
               onClick={() => onViewChange('3D')}
               className={`flex flex-col items-center justify-center p-2 rounded w-16 h-16 transition-colors ${
-                viewMode === '3D' ? 'bg-yellow-100 border border-yellow-300 text-yellow-800' : 'hover:bg-gray-200 border border-transparent text-gray-700'
+                viewMode === '3D' ? 'bg-blue-100 border border-blue-300 text-blue-800' : 'hover:bg-gray-200 border border-transparent text-gray-700'
               }`}
             >
               <Box size={24} />
@@ -80,7 +80,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeMode, viewMode, currentL
               <button
                 onClick={() => onModeChange('select')}
                 className={`flex flex-col items-center justify-center p-2 rounded w-14 h-16 transition-colors ${
-                  activeMode === 'select' ? 'bg-yellow-100 border border-yellow-300 text-yellow-800' : 'hover:bg-gray-200 border border-transparent text-gray-700'
+                  activeMode === 'select' ? 'bg-blue-100 border border-blue-300 text-blue-800' : 'hover:bg-gray-200 border border-transparent text-gray-700'
                 }`}
               >
                 <MousePointer2 size={24} />
@@ -89,7 +89,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeMode, viewMode, currentL
               <button
                 onClick={() => onModeChange('draw')}
                 className={`flex flex-col items-center justify-center p-2 rounded w-14 h-16 transition-colors ${
-                  activeMode === 'draw' ? 'bg-yellow-100 border border-yellow-300 text-yellow-800' : 'hover:bg-gray-200 border border-transparent text-gray-700'
+                  activeMode === 'draw' ? 'bg-blue-100 border border-blue-300 text-blue-800' : 'hover:bg-gray-200 border border-transparent text-gray-700'
                 }`}
               >
                 <Pencil size={24} />
@@ -98,7 +98,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ activeMode, viewMode, currentL
               <button
                 onClick={() => onModeChange('column')}
                 className={`flex flex-col items-center justify-center p-2 rounded w-14 h-16 transition-colors ${
-                  activeMode === 'column' ? 'bg-yellow-100 border border-yellow-300 text-yellow-800' : 'hover:bg-gray-200 border border-transparent text-gray-700'
+                  activeMode === 'column' ? 'bg-blue-100 border border-blue-300 text-blue-800' : 'hover:bg-gray-200 border border-transparent text-gray-700'
                 }`}
               >
                 <Square fill="currentColor" size={24} />
