@@ -22,6 +22,9 @@ export interface FurnitureElement {
   angle: number; // en radianes
   level: number; // Piso 1, 2, etc.
   label?: string;
+  manufacturer?: string;
+  cost?: number;
+  serialNumber?: string;
 }
 
 export class Wall {

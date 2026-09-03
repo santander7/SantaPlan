@@ -270,35 +270,34 @@ export const CadWorkspace: React.FC = () => {
     let svgPath = ''; let scale = 1; let isSolid = false;
     
     if (f.type === 'bed') {
-      svgPath = "M 0 0 L 100 0 L 100 120 L 0 120 Z M 10 10 L 40 10 L 40 30 L 10 30 Z M 60 10 L 90 10 L 90 30 L 60 30 Z M 0 40 L 100 40";
-      scale = 0.6;
+      svgPath = "M 0 0 L 100 0 L 100 120 L 0 120 Z M 10 5 L 45 5 L 45 30 L 10 30 Z M 55 5 L 90 5 L 90 30 L 55 30 Z M 0 45 L 100 45 M 20 45 L 80 45 L 80 115 L 20 115 Z";
+      scale = 0.8;
     } else if (f.type === 'toilet') {
-      svgPath = "M 10 0 L 30 0 L 30 15 L 10 15 Z M 15 15 C 5 40 35 40 25 15 Z";
-      scale = 1.0;
+      svgPath = "M 0 0 L 40 0 L 40 15 L 0 15 Z M 8 15 C 8 45 32 45 32 15 Z M 15 20 C 15 35 25 35 25 20 Z M 20 0 L 20 4";
+      scale = 0.8;
     } else if (f.type === 'plant') {
-      svgPath = "M 20 0 C 40 0 40 40 20 40 C 0 40 0 0 20 0 Z";
+      svgPath = "M 20 20 C 20 0 0 10 20 20 C 40 10 20 0 20 20 C 20 40 40 30 20 20 C 0 30 20 40 20 20 Z";
       scale = 1.0;
     } else if (f.type === 'sofa') {
-      svgPath = "M 0 0 L 120 0 L 120 50 L 0 50 Z M 10 10 L 110 10 L 110 40 L 10 40 Z M 10 10 L 40 10 L 40 40 L 10 40 Z M 40 10 L 80 10 L 80 40 L 40 40 Z M 80 10 L 110 10 L 110 40 L 80 40 Z";
-      scale = 0.6;
+      svgPath = "M 0 0 L 120 0 L 120 45 L 0 45 Z M 15 5 L 105 5 L 105 35 L 15 35 Z M 15 5 L 45 5 L 45 35 L 15 35 Z M 45 5 L 75 5 L 75 35 L 45 35 Z M 75 5 L 105 5 L 105 35 L 75 35 Z M 0 5 L 15 5 L 15 45 L 0 45 Z M 105 5 L 120 5 L 120 45 L 105 45 Z";
+      scale = 0.8;
     } else if (f.type === 'table') {
-      svgPath = "M 0 0 L 80 0 L 80 80 L 0 80 Z M 10 10 L 70 10 L 70 70 L 10 70 Z";
-      scale = 0.7;
+      svgPath = "M 20 20 L 80 20 L 80 80 L 20 80 Z M 25 25 L 75 25 L 75 75 L 25 75 Z M 30 0 L 70 0 L 70 15 L 30 15 Z M 30 85 L 70 85 L 70 100 L 30 100 Z M 0 30 L 15 30 L 15 70 L 0 70 Z M 85 30 L 100 30 L 100 70 L 85 70 Z";
+      scale = 0.8;
     } else if (f.type === 'chair') {
-      svgPath = "M 0 0 L 40 0 L 40 40 L 0 40 Z M 5 30 L 35 30 L 35 45 L 5 45 Z";
-      scale = 0.8;
+      svgPath = "M 5 5 L 35 5 L 35 35 L 5 35 Z M 0 0 L 40 0 L 40 10 L 0 10 Z M 10 10 L 30 10 L 30 30 L 10 30 Z";
+      scale = 0.9;
     } else if (f.type === 'stairs') {
-      svgPath = "M 0 0 L 60 0 L 60 120 L 0 120 Z M 0 20 L 60 20 M 0 40 L 60 40 M 0 60 L 60 60 M 0 80 L 60 80 M 0 100 L 60 100";
-      scale = 0.8;
+      svgPath = "M 0 0 L 40 0 L 40 120 L 0 120 Z M 0 20 L 40 20 M 0 40 L 40 40 M 0 60 L 40 60 M 0 80 L 40 80 M 0 100 L 40 100 M 20 10 L 20 110 M 15 15 L 20 5 L 25 15";
+      scale = 0.9;
     } else if (f.type === 'column') {
-      svgPath = "M 0 0 L 20 0 L 20 20 L 0 20 Z";
+      svgPath = "M 0 0 L 20 0 L 20 20 L 0 20 Z M 0 0 L 20 20 M 20 0 L 0 20";
       scale = 1.0; isSolid = true; 
     } else if (f.type === 'car') {
-      // Silueta realista de auto top-down
-      svgPath = "M 15 10 C 25 5, 45 5, 55 10 L 65 30 L 65 110 C 55 115, 15 115, 5 110 L 5 30 Z M 12 35 C 25 25, 45 25, 58 35 L 55 60 L 15 60 Z M 15 90 C 25 100, 45 100, 55 90 L 52 70 L 18 70 Z M 0 40 L 5 40 L 5 50 L 0 50 Z M 65 40 L 70 40 L 70 50 L 65 50 Z";
-      scale = 1.5;
+      svgPath = "M 15 5 C 25 0, 45 0, 55 5 L 65 25 L 65 115 C 55 120, 15 120, 5 115 L 5 25 Z M 12 35 C 25 25, 45 25, 58 35 L 55 60 L 15 60 Z M 15 90 C 25 100, 45 100, 55 90 L 52 70 L 18 70 Z M -2 20 L 5 20 L 5 45 L -2 45 Z M 65 20 L 72 20 L 72 45 L 65 45 Z M -2 80 L 5 80 L 5 105 L -2 105 Z M 65 80 L 72 80 L 72 105 L 65 105 Z M 20 10 L 50 10 M 20 110 L 50 110";
+      scale = 1.0;
     } else if (f.type === 'dining') {
-      svgPath = "M 20 20 L 120 20 L 120 80 L 20 80 Z M 40 10 L 60 10 M 80 10 L 100 10 M 40 90 L 60 90 M 80 90 L 100 90 M 10 40 L 10 60 M 130 40 L 130 60";
+      svgPath = "M 20 0 L 140 0 L 140 60 L 20 60 Z M 35 -15 L 60 -15 L 60 -5 L 35 -5 Z M 70 -15 L 95 -15 L 95 -5 L 70 -5 Z M 105 -15 L 130 -15 L 130 -5 L 105 -5 Z M 35 65 L 60 65 L 60 75 L 35 75 Z M 70 65 L 95 65 L 95 75 L 70 75 Z M 105 65 L 130 65 L 130 75 L 105 75 Z M 5 15 L 15 15 L 15 45 L 5 45 Z M 145 15 L 155 15 L 155 45 L 145 45 Z";
       scale = 0.8;
     } else if (f.type === 'tv') {
       svgPath = "M 0 0 L 100 0 L 100 10 L 0 10 Z";
@@ -348,7 +347,8 @@ export const CadWorkspace: React.FC = () => {
         const ey = wall.startPoint.y + (wall.endPoint.y - wall.startPoint.y) * el.positionRatio;
         let elGrp;
         if (el.type === 'door') {
-          const dPath = new fabric.Path("M 0 0 L 40 0 C 40 40 0 40 0 0 Z", { fill: 'transparent', stroke: 'black', strokeWidth: 1.5 });
+          // Arco arquitectónico para puerta a 90 grados
+          const dPath = new fabric.Path("M -20 0 L -20 -40 A 40 40 0 0 1 20 0 Z", { fill: 'transparent', stroke: 'black', strokeWidth: 1.5 });
           elGrp = new fabric.Group([dPath], { left: ex, top: ey, originX: 'center', originY: 'center', angle: (wall.angleRad * 180) / Math.PI });
         } else if (el.type === 'garage') {
           const dPath = new fabric.Path(`M -40 0 L 40 0 L 40 10 L -40 10 Z M -30 0 L -30 10 M -10 0 L -10 10 M 10 0 L 10 10 M 30 0 L 30 10`, { fill: 'white', stroke: 'black', strokeWidth: 1.0 });
@@ -739,9 +739,46 @@ export const CadWorkspace: React.FC = () => {
       manager.positionGizmoEnabled = true;
       manager.rotationGizmoEnabled = true;
       manager.boundingBoxGizmoEnabled = false;
-      manager.usePointerToAttachGizmos = true;
+      manager.usePointerToAttachGizmos = false;
       manager.clearGizmoOnEmptyPointerEvent = true;
       gizmoManager.current = manager;
+
+      const syncMeshToState = (attachedMesh: BABYLON.AbstractMesh) => {
+          if (!attachedMesh || !attachedMesh.name.startsWith("f_")) return;
+          const id = attachedMesh.name.substring(2);
+          setFurniture(prev => prev.map(f => {
+              if (f.id === id) {
+                  return {
+                      ...f,
+                      position: { x: attachedMesh.position.x * PIXELS_PER_METER, y: -attachedMesh.position.z * PIXELS_PER_METER },
+                      angle: -attachedMesh.rotation.y
+                  };
+              }
+              return f;
+          }));
+      };
+
+      if (manager.gizmos.positionGizmo) manager.gizmos.positionGizmo.onDragEndObservable.add(() => { if(manager.attachedMesh) syncMeshToState(manager.attachedMesh); });
+      if (manager.gizmos.rotationGizmo) manager.gizmos.rotationGizmo.onDragEndObservable.add(() => { if(manager.attachedMesh) syncMeshToState(manager.attachedMesh); });
+
+      scene.onPointerObservable.add((pointerInfo) => {
+        if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN) {
+            if (pointerInfo.pickInfo?.hit && pointerInfo.pickInfo.pickedMesh) {
+                let mesh: BABYLON.Node | null = pointerInfo.pickInfo.pickedMesh;
+                // Subir en la jerarquía hasta encontrar el nodo raíz del mueble
+                while (mesh && mesh.parent && mesh.name !== "skyBox" && !mesh.name.startsWith("f_")) {
+                    mesh = mesh.parent;
+                }
+                if (mesh && mesh.name.startsWith("f_")) {
+                    manager.attachToMesh(mesh as BABYLON.AbstractMesh);
+                } else if (!mesh || (mesh.name !== "skyBox" && !mesh.name.startsWith("wall") && mesh.name !== "ground")) {
+                    manager.attachToMesh(null);
+                }
+            } else {
+                manager.attachToMesh(null);
+            }
+        }
+      });
 
       // Habilitar gravedad y colisiones para realidad virtual / primera persona
       scene.gravity = new BABYLON.Vector3(0, -0.9, 0);
@@ -1037,7 +1074,7 @@ export const CadWorkspace: React.FC = () => {
     });
   }, [viewMode, walls, furniture, isFirstPerson]);
 
-  const updateElementProp = (type: 'width' | 'height' | 'elevation' | 'label', val: any) => {
+  const updateElementProp = (type: 'width' | 'height' | 'elevation' | 'label' | 'manufacturer' | 'cost' | 'serialNumber', val: any) => {
     if(!selectedObjectId) return;
     if (selectedObjectType === 'furniture') {
        setFurniture(prev => prev.map(f => f.id === selectedObjectId ? { ...f, [type]: val } : f));
@@ -1235,9 +1272,42 @@ export const CadWorkspace: React.FC = () => {
                 )}
 
                 {selectedFurn.type === 'column' ? (
-                  <p className="text-xs text-gray-600">Elemento estructural fijo. Los muros dibujados cerca se ajustarán magnéticamente a su centro.</p>
+                  <p className="text-xs text-gray-600 mb-2">Elemento estructural fijo. Los muros dibujados cerca se ajustarán magnéticamente a su centro.</p>
                 ) : (
-                  <p className="text-xs text-gray-600">Para escalar y rotar libremente, usa los controles interactivos en la vista 3D.</p>
+                  <p className="text-xs text-gray-600 mb-4">Para escalar y rotar libremente, usa los controles interactivos en la vista 3D.</p>
+                )}
+                
+                {selectedFurn.type !== 'text' && selectedFurn.type !== 'column' && (
+                  <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-gray-200">
+                    <p className="text-xs font-bold text-gray-800 mb-1">Especificaciones (Opcional)</p>
+                    <label className="flex flex-col text-[11px] font-semibold gap-1 text-gray-500">
+                      Fabricante
+                      <input 
+                        type="text" 
+                        value={selectedFurn.manufacturer || ''} 
+                        onChange={e => updateElementProp('manufacturer', e.target.value)} 
+                        className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-blue-400 font-normal text-gray-700" 
+                      />
+                    </label>
+                    <label className="flex flex-col text-[11px] font-semibold gap-1 text-gray-500">
+                      Costo Estimado ($)
+                      <input 
+                        type="number" 
+                        value={selectedFurn.cost || ''} 
+                        onChange={e => updateElementProp('cost', Number(e.target.value))} 
+                        className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-blue-400 font-normal text-gray-700" 
+                      />
+                    </label>
+                    <label className="flex flex-col text-[11px] font-semibold gap-1 text-gray-500">
+                      Número de Serie / Referencia
+                      <input 
+                        type="text" 
+                        value={selectedFurn.serialNumber || ''} 
+                        onChange={e => updateElementProp('serialNumber', e.target.value)} 
+                        className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-blue-400 font-normal text-gray-700" 
+                      />
+                    </label>
+                  </div>
                 )}
               </div>
             )}
